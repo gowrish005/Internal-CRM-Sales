@@ -1,26 +1,120 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0d1a11;
+  --foreground: #ebebeb;
+  --card: #111e14;
+  --card-foreground: #ebebeb;
+  --popover: #0f1a12;
+  --popover-foreground: #ebebeb;
+  --primary: #22c55e;
+  --primary-foreground: #071209;
+  --secondary: #1a2e1c;
+  --secondary-foreground: #c0c0c0;
+  --muted: #162419;
+  --muted-foreground: #7a7a7a;
+  --accent: #1a3020;
+  --accent-foreground: #22c55e;
+  --brand: #22c55e;
+  --destructive: #ef4444;
+  --destructive-foreground: #fff;
+  --border: #1e3322;
+  --input: #1a2c1e;
+  --ring: #22c55e;
+  --radius: 0.5rem;
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 52px;
+  --sidebar-bg: #091410;
+  --sidebar-text: #4d7055;
+  --sidebar-text-active: #e2ede2;
+  --sidebar-hover: rgba(34,197,94,0.07);
+  --sidebar-active-bg: rgba(34,197,94,0.12);
+  --sidebar-section: #3a5a3a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-accent: var(--accent);
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e3322;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a4a2e;
+}
+
+/* Stat card gradient */
+.stat-card-gradient {
+  background: linear-gradient(135deg, #111e14 0%, #162e1a 60%, #1a3a20 100%);
+}
+
+/* Green glow on primary buttons */
+.btn-primary-glow:hover {
+  box-shadow: 0 0 16px rgba(34,197,94,0.25);
+}
+
+/* Page transition */
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: pageIn 0.18s ease-out both;
+  will-change: opacity, transform;
+}
+
+/* Section view-all link hover */
+.section-view-all {
+  color: var(--muted-foreground);
+  border: 1px solid #1e3322;
+  transition: color 0.15s, border-color 0.15s;
+}
+.section-view-all:hover {
+  color: #22c55e;
+  border-color: #22c55e;
 }

@@ -1,0 +1,304 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  FOUNDER
+  EMPLOYEE
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum LeadSource {
+  REFERRAL
+  WEBSITE
+  COLD_OUTREACH
+  EVENT
+  SOCIAL_MEDIA
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum EventType {
+  MEETING
+  CALL
+  EVENT
+  FOLLOW_UP
+}
+
+enum ActivityType {
+  CONTACT_CREATED
+  CONTACT_UPDATED
+  BRANCH_CREATED
+  LEAD_CREATED
+  LEAD_STATUS_CHANGED
+  MEETING_CREATED
+  MEETING_RESCHEDULED
+  TASK_CREATED
+  TASK_COMPLETED
+  NOTE_ADDED
+  FOLLOW_UP_CREATED
+  FOLLOW_UP_COMPLETED
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(EMPLOYEE)
+  image         String?
+  isActive      Boolean   @default(true)
+  branchId      String?   @db.ObjectId
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  branch        Branch?   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownedContacts Contact[] @relation("ContactOwner")
+  ownedLeads    Lead[]    @relation("LeadOwner")
+  ownedTasks    Task[]    @relation("TaskOwner")
+  organizedMeetings CalendarEvent[] @relation("EventOrganizer")
+  participantIn CalendarEvent[] @relation("EventParticipants", fields: [participantEventIds], references: [id])
+  participantEventIds String[] @db.ObjectId
+  notes         Note[]
+  activities    Activity[]
+  accounts      Account[]
+  sessions      Session[]
+  managedBranches Branch[] @relation("BranchManager")
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Branch {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  code        String    @unique
+  location    String?
+  address     String?
+  managerId   String?   @db.ObjectId
+  notes       String?
+  tags        String[]
+  isArchived  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  manager     User?     @relation("BranchManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users       User[]
+  contacts    Contact[]
+  leads       Lead[]
+  meetings    CalendarEvent[]
+  tasks       Task[]
+  branchNotes Note[]    @relation("BranchNotes")
+  activities  Activity[]
+}
+
+model Contact {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  designation     String?
+  company         String?
+  linkedin        String?
+  location        String?
+  image           String?
+  branchId        String?   @db.ObjectId
+  ownerId         String?   @db.ObjectId
+  leadStatus      LeadStatus @default(NEW)
+  leadSource      LeadSource?
+  priority        Priority  @default(MEDIUM)
+  tags            String[]
+  lastContactedAt DateTime?
+  nextFollowUpAt  DateTime?
+  isArchived      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  branch          Branch?   @relation(fields: [branchId], references: [id])
+  owner           User?     @relation("ContactOwner", fields: [ownerId], references: [id])
+  leads           Lead[]
+  meetings        CalendarEvent[]
+  tasks           Task[]
+  notes           Note[]    @relation("ContactNotes")
+  activities      Activity[]
+}
+
+model Lead {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  branchId        String?    @db.ObjectId
+  contactId       String?    @db.ObjectId
+  ownerId         String?    @db.ObjectId
+  source          LeadSource?
+  status          LeadStatus @default(NEW)
+  priority        Priority   @default(MEDIUM)
+  estimatedValue  Float?
+  expectedCloseAt DateTime?
+  lastActivityAt  DateTime?
+  nextFollowUpAt  DateTime?
+  isArchived      Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  branch          Branch?    @relation(fields: [branchId], references: [id])
+  contact         Contact?   @relation(fields: [contactId], references: [id])
+  owner           User?      @relation("LeadOwner", fields: [ownerId], references: [id])
+  meetings        CalendarEvent[]
+  tasks           Task[]
+  notes           Note[]     @relation("LeadNotes")
+  activities      Activity[]
+}
+
+model CalendarEvent {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String?
+  type          EventType @default(MEETING)
+  startAt       DateTime
+  endAt         DateTime
+  location      String?
+  meetingLink   String?
+  organizerId   String?   @db.ObjectId
+  branchId      String?   @db.ObjectId
+  contactId     String?   @db.ObjectId
+  leadId        String?   @db.ObjectId
+  color         String?
+  isRecurring   Boolean   @default(false)
+  notes         String?
+  reminderAt    DateTime?
+  isCancelled   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organizer     User?     @relation("EventOrganizer", fields: [organizerId], references: [id])
+  participants  User[]    @relation("EventParticipants", fields: [participantIds], references: [id])
+  participantIds String[] @db.ObjectId
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  contact       Contact?  @relation(fields: [contactId], references: [id])
+  lead          Lead?     @relation(fields: [leadId], references: [id])
+  tasks         Task[]
+  eventNotes    Note[]    @relation("EventNotes")
+  activities    Activity[]
+}
+
+model Task {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  ownerId     String?    @db.ObjectId
+  branchId    String?    @db.ObjectId
+  priority    Priority   @default(MEDIUM)
+  status      TaskStatus @default(TODO)
+  dueAt       DateTime?
+  contactId   String?    @db.ObjectId
+  leadId      String?    @db.ObjectId
+  meetingId   String?    @db.ObjectId
+  isArchived  Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  owner       User?      @relation("TaskOwner", fields: [ownerId], references: [id])
+  branch      Branch?    @relation(fields: [branchId], references: [id])
+  contact     Contact?   @relation(fields: [contactId], references: [id])
+  lead        Lead?      @relation(fields: [leadId], references: [id])
+  meeting     CalendarEvent? @relation(fields: [meetingId], references: [id])
+  activities  Activity[]
+}
+
+model Note {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  authorId    String   @db.ObjectId
+  contactId   String?  @db.ObjectId
+  branchId    String?  @db.ObjectId
+  leadId      String?  @db.ObjectId
+  meetingId   String?  @db.ObjectId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User     @relation(fields: [authorId], references: [id])
+  contact     Contact? @relation("ContactNotes", fields: [contactId], references: [id])
+  branch      Branch?  @relation("BranchNotes", fields: [branchId], references: [id])
+  lead        Lead?    @relation("LeadNotes", fields: [leadId], references: [id])
+  meeting     CalendarEvent? @relation("EventNotes", fields: [meetingId], references: [id])
+}
+
+model Activity {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  type        ActivityType
+  description String
+  userId      String?      @db.ObjectId
+  contactId   String?      @db.ObjectId
+  branchId    String?      @db.ObjectId
+  leadId      String?      @db.ObjectId
+  meetingId   String?      @db.ObjectId
+  taskId      String?      @db.ObjectId
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+
+  user        User?        @relation(fields: [userId], references: [id])
+  contact     Contact?     @relation(fields: [contactId], references: [id])
+  branch      Branch?      @relation(fields: [branchId], references: [id])
+  lead        Lead?        @relation(fields: [leadId], references: [id])
+  meeting     CalendarEvent? @relation(fields: [meetingId], references: [id])
+  task        Task?        @relation(fields: [taskId], references: [id])
+}

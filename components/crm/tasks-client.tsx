@@ -1,0 +1,214 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { format, isPast, isToday } from "date-fns";
+import { Plus, CheckCircle, Circle, X } from "lucide-react";
+import { createTask, updateTask, archiveTask } from "@/lib/actions/tasks";
+
+const VIEWS = [
+  { key: "all", label: "All" },
+  { key: "mine", label: "My Tasks" },
+  { key: "today", label: "Today" },
+  { key: "overdue", label: "Overdue" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "completed", label: "Completed" },
+] as const;
+
+const PRIORITY_COLORS: Record<string, string> = { LOW: "#6b7280", MEDIUM: "#f59e0b", HIGH: "#dc2626" };
+const STATUS_COLORS: Record<string, string> = { TODO: "#6b7280", IN_PROGRESS: "#3b82f6", COMPLETED: "#059669" };
+
+interface Props {
+  tasks: any[];
+  users: any[];
+  branches: any[];
+  contacts: any[];
+  leads: any[];
+}
+
+export function TasksClient({ tasks: initial, users, branches, contacts, leads }: Props) {
+  const [tasks, setTasks] = useState(initial);
+  const [activeView, setActiveView] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today.getTime() + 86400000);
+
+  function filterTasks(t: any) {
+    if (activeView === "mine") return t.status !== "COMPLETED";
+    if (activeView === "today") return t.dueAt && new Date(t.dueAt) >= today && new Date(t.dueAt) < tomorrow && t.status !== "COMPLETED";
+    if (activeView === "overdue") return t.dueAt && new Date(t.dueAt) < today && t.status !== "COMPLETED";
+    if (activeView === "upcoming") return t.dueAt && new Date(t.dueAt) >= tomorrow && t.status !== "COMPLETED";
+    if (activeView === "completed") return t.status === "COMPLETED";
+    return true;
+  }
+
+  const filtered = tasks.filter(filterTasks);
+
+  async function handleCreate(data: any) {
+    startTransition(async () => {
+      try {
+        await createTask(data);
+        router.refresh();
+        setShowForm(false);
+      } catch (err: any) {
+        alert("Error: " + err.message);
+      }
+    });
+  }
+
+  async function toggleComplete(task: any) {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, status: newStatus } : t));
+    startTransition(async () => {
+      try {
+        await updateTask(task.id, { status: newStatus });
+      } catch {
+        setTasks(initial);
+      }
+    });
+  }
+
+  return (
+    <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>Tasks</h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>{filtered.length} tasks</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium"
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+        >
+          <Plus size={14} /> Add Task
+        </button>
+      </div>
+
+      {/* View tabs */}
+      <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
+        {VIEWS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setActiveView(key)}
+            className="px-3 py-2 text-sm"
+            style={activeView === key
+              ? { color: "var(--primary)", borderBottom: "2px solid var(--primary)", fontWeight: 500 }
+              : { color: "var(--muted-foreground)" }
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Task list */}
+      <div className="rounded-lg border overflow-hidden" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>No tasks in this view</p>
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {filtered.map((task) => {
+              const overdue = task.dueAt && isPast(new Date(task.dueAt)) && task.status !== "COMPLETED";
+              return (
+                <div key={task.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--muted)]">
+                  <button
+                    onClick={() => toggleComplete(task)}
+                    className="mt-0.5 shrink-0"
+                    style={{ color: task.status === "COMPLETED" ? "#059669" : "var(--muted-foreground)" }}
+                  >
+                    {task.status === "COMPLETED" ? <CheckCircle size={17} /> : <Circle size={17} />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-sm"
+                      style={{
+                        color: "var(--foreground)",
+                        textDecoration: task.status === "COMPLETED" ? "line-through" : "none",
+                        opacity: task.status === "COMPLETED" ? 0.6 : 1,
+                      }}
+                    >
+                      {task.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      {task.dueAt && (
+                        <span className="text-xs" style={{ color: overdue ? "#dc2626" : "var(--muted-foreground)" }}>
+                          {overdue ? "Overdue · " : ""}{format(new Date(task.dueAt), "MMM d")}
+                        </span>
+                      )}
+                      <span className="text-xs font-medium" style={{ color: PRIORITY_COLORS[task.priority] }}>{task.priority}</span>
+                      {task.owner && <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{task.owner.name}</span>}
+                      {task.contact && <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{task.contact.firstName} {task.contact.lastName}</span>}
+                    </div>
+                  </div>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full shrink-0"
+                    style={{ background: `${STATUS_COLORS[task.status]}15`, color: STATUS_COLORS[task.status] }}
+                  >
+                    {task.status.replace("_", " ")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {showForm && (
+        <TaskForm users={users} branches={branches} contacts={contacts} leads={leads} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+      )}
+    </div>
+  );
+}
+
+function TaskForm({ users, branches, contacts, leads, onSubmit, onClose, loading }: any) {
+  const [form, setForm] = useState({
+    title: "", description: "", ownerId: "", branchId: "", priority: "MEDIUM",
+    status: "TODO", dueAt: "", contactId: "", leadId: "",
+  });
+  const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+      <div className="w-full max-w-md rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Add Task</h2>
+          <button onClick={onClose} style={{ color: "var(--muted-foreground)" }}><X size={18} /></button>
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, ownerId: form.ownerId || undefined, branchId: form.branchId || undefined, contactId: form.contactId || undefined, leadId: form.leadId || undefined, dueAt: form.dueAt || undefined }); }} className="p-5 space-y-3">
+          <F label="Title" required><input value={form.title} onChange={(e) => set("title", e.target.value)} required className="fi" /></F>
+          <div className="grid grid-cols-2 gap-3">
+            <F label="Owner"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
+            <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
+            <F label="Due Date"><input type="date" value={form.dueAt} onChange={(e) => set("dueAt", e.target.value)} className="fi" /></F>
+            <F label="Branch"><select value={form.branchId} onChange={(e) => set("branchId", e.target.value)} className="fi"><option value="">None</option>{branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></F>
+            <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+            <F label="Lead"><select value={form.leadId} onChange={(e) => set("leadId", e.target.value)} className="fi"><option value="">None</option>{leads.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></F>
+          </div>
+          <F label="Description"><textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} className="fi resize-none" /></F>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-sm" style={{ color: "var(--muted-foreground)", background: "var(--secondary)" }}>Cancel</button>
+            <button type="submit" disabled={loading} className="px-3 py-1.5 rounded-md text-sm font-medium disabled:opacity-60" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+              {loading ? "Creating..." : "Create Task"}
+            </button>
+          </div>
+        </form>
+        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}`}</style>
+      </div>
+    </div>
+  );
+}
+
+function F({ label, children, required }: any) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>{label}{required && " *"}</label>
+      {children}
+    </div>
+  );
+}
