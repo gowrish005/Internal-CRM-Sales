@@ -8,7 +8,6 @@ import { createTask, updateTask, archiveTask } from "@/lib/actions/tasks";
 
 const VIEWS = [
   { key: "all", label: "All" },
-  { key: "mine", label: "My Tasks" },
   { key: "today", label: "Today" },
   { key: "overdue", label: "Overdue" },
   { key: "upcoming", label: "Upcoming" },
@@ -24,11 +23,13 @@ interface Props {
   branches: any[];
   contacts: any[];
   leads: any[];
+  currentUserId?: string;
 }
 
-export function TasksClient({ tasks: initial, users, branches, contacts, leads }: Props) {
+export function TasksClient({ tasks: initial, users, branches, contacts, leads, currentUserId }: Props) {
   const [tasks, setTasks] = useState(initial);
   const [activeView, setActiveView] = useState("all");
+  const [myTasksOnly, setMyTasksOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -38,7 +39,6 @@ export function TasksClient({ tasks: initial, users, branches, contacts, leads }
   const tomorrow = new Date(today.getTime() + 86400000);
 
   function filterTasks(t: any) {
-    if (activeView === "mine") return t.status !== "COMPLETED";
     if (activeView === "today") return t.dueAt && new Date(t.dueAt) >= today && new Date(t.dueAt) < tomorrow && t.status !== "COMPLETED";
     if (activeView === "overdue") return t.dueAt && new Date(t.dueAt) < today && t.status !== "COMPLETED";
     if (activeView === "upcoming") return t.dueAt && new Date(t.dueAt) >= tomorrow && t.status !== "COMPLETED";
@@ -46,7 +46,7 @@ export function TasksClient({ tasks: initial, users, branches, contacts, leads }
     return true;
   }
 
-  const filtered = tasks.filter(filterTasks);
+  const filtered = tasks.filter(filterTasks).filter((t) => !myTasksOnly || t.ownerId === currentUserId);
 
   async function handleCreate(data: any) {
     startTransition(async () => {
@@ -89,20 +89,49 @@ export function TasksClient({ tasks: initial, users, branches, contacts, leads }
       </div>
 
       {/* View tabs */}
-      <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
-        {VIEWS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setActiveView(key)}
-            className="px-3 py-2 text-sm"
-            style={activeView === key
-              ? { color: "var(--primary)", borderBottom: "2px solid var(--primary)", fontWeight: 500 }
-              : { color: "var(--muted-foreground)" }
-            }
+      <div className="flex items-center justify-between border-b" style={{ borderColor: "var(--border)" }}>
+        <div className="flex gap-1">
+          {VIEWS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveView(key)}
+              className="px-3 py-2 text-sm"
+              style={activeView === key
+                ? { color: "var(--primary)", borderBottom: "2px solid var(--primary)", fontWeight: 500 }
+                : { color: "var(--muted-foreground)" }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setMyTasksOnly((v) => !v)}
+          className="flex items-center gap-2 pr-1 pb-1 cursor-pointer select-none"
+          style={{ background: "none", border: "none", padding: 0 }}
+        >
+          {/* Toggle pill */}
+          <span
+            className="relative inline-flex items-center shrink-0 transition-colors duration-200"
+            style={{
+              width: 32, height: 18, borderRadius: 9,
+              background: myTasksOnly ? "rgba(34,197,94,0.85)" : "rgba(255,255,255,0.08)",
+              border: myTasksOnly ? "1px solid rgba(34,197,94,0.6)" : "1px solid rgba(255,255,255,0.12)",
+              boxShadow: myTasksOnly ? "0 0 8px rgba(34,197,94,0.3)" : "none",
+            }}
           >
-            {label}
-          </button>
-        ))}
+            <span
+              className="absolute transition-all duration-200"
+              style={{
+                width: 12, height: 12, borderRadius: "50%",
+                background: myTasksOnly ? "#fff" : "rgba(255,255,255,0.4)",
+                left: myTasksOnly ? 17 : 3,
+                boxShadow: myTasksOnly ? "0 1px 3px rgba(0,0,0,0.3)" : "none",
+              }}
+            />
+          </span>
+          <span className="text-xs font-medium" style={{ color: myTasksOnly ? "#4ade80" : "var(--muted-foreground)" }}>My Tasks</span>
+        </button>
       </div>
 
       {/* Task list */}

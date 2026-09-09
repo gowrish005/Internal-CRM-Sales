@@ -43,9 +43,10 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
   async function handleCreate(data: any) {
     startTransition(async () => {
       try {
-        await createEvent({ ...data, organizerId: currentUserId });
-        router.refresh();
+        const newEvent = await createEvent({ ...data, organizerId: currentUserId });
+        setEvents((prev) => [...prev, newEvent]);
         setShowForm(false);
+        router.refresh();
       } catch (err: any) {
         alert("Error: " + err.message);
       }
@@ -128,7 +129,7 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
 
       {/* Calendar body */}
       <div className="flex-1 overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)" }}>
-        {view === "week" && <WeekView current={current} events={filteredEvents} onEventClick={setSelectedEvent} onDayClick={(d: Date) => { setFormDate(d); setShowForm(true); }} />}
+        {view === "week" && <WeekView current={current} events={filteredEvents} onEventClick={setSelectedEvent} onDayClick={(d: Date) => { setFormDate(d); setShowForm(true); }} onCellClick={(d: Date) => { setFormDate(d); setShowForm(true); }} />}
         {view === "month" && <MonthView current={current} events={filteredEvents} onEventClick={setSelectedEvent} onDayClick={(d: Date) => { setFormDate(d); setShowForm(true); }} />}
         {view === "day" && <DayView current={current} events={filteredEvents} onEventClick={setSelectedEvent} />}
         {view === "agenda" && <AgendaView events={filteredEvents} onEventClick={setSelectedEvent} />}
@@ -155,7 +156,7 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
   );
 }
 
-function WeekView({ current, events, onEventClick, onDayClick }: any) {
+function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: any) {
   const start = startOfWeek(current, { weekStartsOn: 1 });
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -166,8 +167,8 @@ function WeekView({ current, events, onEventClick, onDayClick }: any) {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--card)" }}>
-      {/* Day headers */}
-      <div className="grid border-b" style={{ gridTemplateColumns: "48px repeat(7, 1fr)", borderColor: "var(--border)" }}>
+      {/* Day headers — scrollbar-gutter keeps widths aligned with scrollable body */}
+      <div className="grid border-b" style={{ gridTemplateColumns: "48px repeat(7, 1fr)", borderColor: "var(--border)", scrollbarGutter: "stable", overflowY: "scroll" }}>
         <div className="border-r" style={{ borderColor: "var(--border)" }} />
         {days.map((day) => (
           <div
@@ -187,20 +188,27 @@ function WeekView({ current, events, onEventClick, onDayClick }: any) {
         ))}
       </div>
       {/* Time grid */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-scroll">
         <div className="relative" style={{ minHeight: `${24 * 60}px` }}>
           {hours.map((h) => (
             <div key={h} className="flex border-b" style={{ height: 60, borderColor: "var(--border)" }}>
               <div className="w-12 shrink-0 border-r px-2 flex items-start pt-1" style={{ borderColor: "var(--border)" }}>
                 <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{h === 0 ? "" : `${h}:00`}</span>
               </div>
-              {days.map((day) => (
-                <div
-                  key={day.toISOString()}
-                  className="flex-1 border-r"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              ))}
+              {days.map((day) => {
+                const cellDate = new Date(day);
+                cellDate.setHours(h, 0, 0, 0);
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className="flex-1 border-r cursor-pointer transition-colors"
+                    style={{ borderColor: "var(--border)" }}
+                    onClick={() => onCellClick(cellDate)}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  />
+                );
+              })}
             </div>
           ))}
           {/* Events overlay */}
@@ -407,13 +415,31 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 }
 
 function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, loading }: any) {
-  const dateStr = defaultDate ? format(defaultDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+  const d = defaultDate ?? new Date();
+  const dateStr = format(d, "yyyy-MM-dd");
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  const startTime = hasTime ? format(d, "HH:mm") : "09:00";
+  const endD = new Date(d.getTime() + 60 * 60 * 1000);
+  const endTime = hasTime ? format(endD, "HH:mm") : "10:00";
+
   const [form, setForm] = useState({
-    title: "", type: "MEETING", startAt: `${dateStr}T09:00`, endAt: `${dateStr}T10:00`,
+    title: "", type: "MEETING",
+    startAt: `${dateStr}T${startTime}`,
+    endAt: `${dateStr}T${endTime}`,
+    locationType: "offline" as "online" | "offline",
     location: "", meetingLink: "", description: "", notes: "",
-    branchId: "", contactId: "", participantIds: [] as string[],
+    contactId: "", participantIds: [] as string[],
   });
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  function onStartChange(val: string) {
+    set("startAt", val);
+    if (val) {
+      const end = new Date(val);
+      end.setHours(end.getHours() + 1);
+      set("endAt", format(end, "yyyy-MM-dd'T'HH:mm"));
+    }
+  }
 
   const quickDurations = [15, 30, 45, 60];
 
@@ -424,12 +450,25 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
           <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>New Event</h2>
           <button onClick={onClose} style={{ color: "var(--muted-foreground)" }}><X size={18} /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, branchId: form.branchId || undefined, contactId: form.contactId || undefined }); }} className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit({
+              ...form,
+              contactId: form.contactId || undefined,
+              location: form.locationType === "offline" ? form.location || undefined : undefined,
+              meetingLink: form.locationType === "online" ? form.meetingLink || undefined : undefined,
+            });
+          }}
+          className="p-5 space-y-3 max-h-[70vh] overflow-y-auto"
+        >
           <F label="Title" required><input value={form.title} onChange={(e) => set("title", e.target.value)} required className="fi" /></F>
           <div className="grid grid-cols-2 gap-3">
             <F label="Type"><select value={form.type} onChange={(e) => set("type", e.target.value)} className="fi">{["MEETING","CALL","EVENT","FOLLOW_UP"].map((t) => <option key={t} value={t}>{t.replace("_"," ")}</option>)}</select></F>
-            <F label="Branch"><select value={form.branchId} onChange={(e) => set("branchId", e.target.value)} className="fi"><option value="">None</option>{branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></F>
-            <F label="Start Time"><input type="datetime-local" value={form.startAt} onChange={(e) => set("startAt", e.target.value)} required className="fi" /></F>
+            <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+            <F label="Start Time">
+              <input type="datetime-local" value={form.startAt} onChange={(e) => onStartChange(e.target.value)} required className="fi" />
+            </F>
             <F label="End Time">
               <input type="datetime-local" value={form.endAt} onChange={(e) => set("endAt", e.target.value)} required className="fi" />
               <div className="flex gap-1 mt-1">
@@ -453,9 +492,34 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
               </div>
             </F>
           </div>
-          <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
-          <F label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} className="fi" placeholder="Office / City" /></F>
-          <F label="Meeting Link"><input value={form.meetingLink} onChange={(e) => set("meetingLink", e.target.value)} className="fi" placeholder="https://meet.google.com/..." /></F>
+
+          {/* Location type toggle */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Location</label>
+            <div className="flex rounded-md border overflow-hidden mb-2" style={{ borderColor: "var(--border)", width: "fit-content" }}>
+              {(["offline", "online"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => set("locationType", t)}
+                  className="px-3 py-1.5 text-xs capitalize"
+                  style={{
+                    background: form.locationType === t ? "var(--secondary)" : "var(--card)",
+                    color: form.locationType === t ? "var(--foreground)" : "var(--muted-foreground)",
+                    borderRight: t === "offline" ? "1px solid var(--border)" : undefined,
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {form.locationType === "offline" ? (
+              <input value={form.location} onChange={(e) => set("location", e.target.value)} className="fi" placeholder="Office, branch, city..." />
+            ) : (
+              <input value={form.meetingLink} onChange={(e) => set("meetingLink", e.target.value)} className="fi" placeholder="https://meet.google.com/..." />
+            )}
+          </div>
+
           <F label="Description"><textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} className="fi resize-none" /></F>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-sm" style={{ color: "var(--muted-foreground)", background: "var(--secondary)" }}>Cancel</button>
@@ -464,7 +528,7 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
             </button>
           </div>
         </form>
-        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}`}</style>
+        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1);opacity:0.55;cursor:pointer}input[type="date"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1);opacity:0.55;cursor:pointer}`}</style>
       </div>
     </div>
   );

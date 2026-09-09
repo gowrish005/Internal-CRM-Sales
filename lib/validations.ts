@@ -36,9 +36,22 @@ export const createLeadSchema = z.object({
   source: z.enum(["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"]).optional(),
   status: z.enum(["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","LOST"]).default("NEW"),
   priority: z.enum(["LOW","MEDIUM","HIGH"]).default("MEDIUM"),
-  estimatedValue: z.number().optional(),
+  track: z.coerce.number().int().min(1).max(3).optional(),
+  estimatedValue: z.coerce.number().optional(),
   expectedCloseAt: z.string().optional(),
   nextFollowUpAt: z.string().optional(),
+});
+
+export const updateLeadSchema = z.object({
+  name: z.string().min(1).optional(),
+  contactId: z.string().optional().nullable(),
+  ownerId: z.string().optional().nullable(),
+  source: z.enum(["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"]).optional().nullable(),
+  status: z.enum(["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","LOST"]).optional(),
+  priority: z.enum(["LOW","MEDIUM","HIGH"]).optional(),
+  track: z.coerce.number().int().min(1).max(3).optional().nullable(),
+  estimatedValue: z.coerce.number().optional().nullable(),
+  nextFollowUpAt: z.string().optional().nullable(),
 });
 
 export const createTaskSchema = z.object({
@@ -83,6 +96,7 @@ export const createNoteSchema = z.object({
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type CreateBranchInput = z.infer<typeof createBranchSchema>;
 export type CreateLeadInput = z.infer<typeof createLeadSchema>;
+export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type CreateNoteInput = z.infer<typeof createNoteSchema>;

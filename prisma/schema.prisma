@@ -191,6 +191,7 @@ model Lead {
   source          LeadSource?
   status          LeadStatus @default(NEW)
   priority        Priority   @default(MEDIUM)
+  track           Int?
   estimatedValue  Float?
   expectedCloseAt DateTime?
   lastActivityAt  DateTime?

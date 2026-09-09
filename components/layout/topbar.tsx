@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, X, Bell } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface TopbarProps {
@@ -62,22 +62,6 @@ export function Topbar({ title }: TopbarProps) {
           </kbd>
         </button>
 
-        <button
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors relative"
-          style={{ background: "#0f1a12", border: "1px solid #1e3322", color: "var(--muted-foreground)" }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a4a2e")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "#1e3322")}
-        >
-          <Bell size={14} />
-        </button>
-
-        <button
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all btn-primary-glow"
-          style={{ background: "#22c55e", color: "#071209" }}
-        >
-          <Plus size={13} />
-          <span className="hidden sm:inline">Create</span>
-        </button>
       </header>
 
       {searchOpen && (
@@ -97,7 +81,7 @@ export function Topbar({ title }: TopbarProps) {
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search contacts, branches, leads, tasks..."
+                placeholder="Search contacts, leads, tasks..."
                 className="flex-1 px-3 py-3.5 text-sm outline-none bg-transparent"
                 style={{ color: "var(--foreground)" }}
               />
@@ -144,7 +128,6 @@ function SearchResults({ query, onSelect }: { query: string; onSelect: () => voi
 
   const hasResults =
     results.contacts?.length ||
-    results.branches?.length ||
     results.leads?.length ||
     results.tasks?.length;
 
@@ -161,18 +144,6 @@ function SearchResults({ query, onSelect }: { query: string; onSelect: () => voi
             label: `${c.firstName} ${c.lastName}`,
             sub: c.designation || c.email || "",
             href: `/crm/contacts/${c.id}`,
-          }))}
-          router={router}
-          onSelect={onSelect}
-        />
-      )}
-      {results.branches?.length > 0 && (
-        <Group
-          label="Branches"
-          items={results.branches.map((b: any) => ({
-            label: b.name,
-            sub: b.location || b.code,
-            href: `/crm/branches/${b.id}`,
           }))}
           router={router}
           onSelect={onSelect}

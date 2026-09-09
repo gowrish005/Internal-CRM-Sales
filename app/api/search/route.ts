@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q") || "";
   if (q.length < 2) return NextResponse.json({ contacts: [], branches: [], leads: [], tasks: [] });
 
-  const [contacts, branches, leads, tasks] = await Promise.all([
+  const [contacts, leads, tasks] = await Promise.all([
     prisma.contact.findMany({
       where: {
         isArchived: false,
@@ -17,35 +17,39 @@ export async function GET(req: NextRequest) {
           { firstName: { contains: q, mode: "insensitive" } },
           { lastName: { contains: q, mode: "insensitive" } },
           { email: { contains: q, mode: "insensitive" } },
+          { company: { contains: q, mode: "insensitive" } },
           { designation: { contains: q, mode: "insensitive" } },
         ],
       },
-      select: { id: true, firstName: true, lastName: true, designation: true, email: true },
+      select: { id: true, firstName: true, lastName: true, designation: true, email: true, company: true },
       take: 5,
     }),
-    prisma.branch.findMany({
+    prisma.lead.findMany({
       where: {
         isArchived: false,
         OR: [
           { name: { contains: q, mode: "insensitive" } },
-          { code: { contains: q, mode: "insensitive" } },
-          { location: { contains: q, mode: "insensitive" } },
+          { owner: { name: { contains: q, mode: "insensitive" } } },
+          { contact: { firstName: { contains: q, mode: "insensitive" } } },
+          { contact: { lastName: { contains: q, mode: "insensitive" } } },
         ],
       },
-      select: { id: true, name: true, code: true, location: true },
-      take: 5,
-    }),
-    prisma.lead.findMany({
-      where: { isArchived: false, name: { contains: q, mode: "insensitive" } },
       select: { id: true, name: true, status: true },
       take: 5,
     }),
     prisma.task.findMany({
-      where: { isArchived: false, title: { contains: q, mode: "insensitive" } },
+      where: {
+        isArchived: false,
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { owner: { name: { contains: q, mode: "insensitive" } } },
+          { description: { contains: q, mode: "insensitive" } },
+        ],
+      },
       select: { id: true, title: true, status: true },
       take: 5,
     }),
   ]);
 
-  return NextResponse.json({ contacts, branches, leads, tasks });
+  return NextResponse.json({ contacts, leads, tasks });
 }

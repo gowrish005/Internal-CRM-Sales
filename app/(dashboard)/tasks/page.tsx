@@ -4,6 +4,7 @@ import { getBranches } from "@/lib/actions/branches";
 import { getContacts } from "@/lib/actions/contacts";
 import { getLeads } from "@/lib/actions/leads";
 import { TasksClient } from "@/components/crm/tasks-client";
+import { auth } from "@/lib/auth";
 
 export default async function TasksPage({
   searchParams,
@@ -12,6 +13,7 @@ export default async function TasksPage({
 }) {
   const params = await searchParams;
   const view = (params.view as any) || undefined;
+  const session = await auth();
 
   const [tasks, users, branches, { contacts }, leads] = await Promise.all([
     getTasks({ view }),
@@ -21,5 +23,5 @@ export default async function TasksPage({
     getLeads(),
   ]);
 
-  return <TasksClient tasks={tasks as any} users={users as any} branches={branches as any} contacts={contacts as any} leads={leads as any} />;
+  return <TasksClient tasks={tasks as any} users={users as any} branches={branches as any} contacts={contacts as any} leads={leads as any} currentUserId={(session?.user as any)?.id} />;
 }

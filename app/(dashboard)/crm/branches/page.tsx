@@ -1,8 +1,5 @@
-import { getBranches } from "@/lib/actions/branches";
-import { getUsers } from "@/lib/actions/users";
-import { BranchesClient } from "@/components/crm/branches-client";
+import { redirect } from "next/navigation";
 
-export default async function BranchesPage() {
-  const [branches, users] = await Promise.all([getBranches(), getUsers()]);
-  return <BranchesClient branches={branches as any} users={users as any} />;
+export default function BranchesPage() {
+  redirect("/dashboard");
 }
