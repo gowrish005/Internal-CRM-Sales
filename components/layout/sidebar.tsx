@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  X,
 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 
@@ -40,9 +41,11 @@ interface SidebarProps {
     image?: string | null;
     role?: string;
   };
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
 
@@ -50,29 +53,53 @@ export function Sidebar({ user }: SidebarProps) {
     return pathname === href || pathname.startsWith(href + "/");
   }
 
+  // On mobile: always full-width (not collapsed), overlay drawer
+  // On desktop: collapsible sidebar in normal flow
   return (
     <aside
-      className="flex flex-col h-full shrink-0 transition-all duration-200"
+      className={cn(
+        "flex flex-col h-full shrink-0 transition-all duration-200",
+        // Mobile: fixed overlay, full sidebar width always, slides in from left
+        "fixed z-50",
+        // Desktop: static in-flow, respects collapsed state
+        "md:static md:z-auto",
+        // Mobile translate (closed = off-screen, open = visible)
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+      )}
+      data-collapsed={collapsed}
       style={{
-        width: collapsed ? "var(--sidebar-width-collapsed)" : "var(--sidebar-width)",
         background: "var(--sidebar-bg)",
         borderRight: "1px solid rgba(34,197,94,0.08)",
+        height: "100%",
       }}
     >
-      {/* Logo */}
+      {/* Logo row */}
       <div
-        className="flex items-center shrink-0 gap-3"
-        style={{ height: "52px", padding: collapsed ? "0" : "0 16px", justifyContent: collapsed ? "center" : "flex-start" }}
+        className="flex items-center shrink-0 gap-3 relative"
+        style={{
+          height: "52px",
+          padding: collapsed ? "0" : "0 16px",
+          justifyContent: collapsed ? "center" : "flex-start",
+        }}
       >
         <div className="flex items-center justify-center w-8 h-8 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/hellcraft-logo.png" alt="HellCraft" width={32} height={32} style={{ objectFit: "contain" }} />
         </div>
         {!collapsed && (
-          <span className="font-bold text-sm tracking-tight truncate" style={{ color: "#ebebeb", letterSpacing: "-0.01em" }}>
-            HellCraft
+          <span className="font-bold text-sm tracking-tight truncate flex-1" style={{ color: "#ebebeb", letterSpacing: "-0.01em" }}>
+            HellCraft Tech
           </span>
         )}
+        {/* Mobile close button inside logo row */}
+        <button
+          className="md:hidden flex items-center justify-center w-7 h-7 rounded-lg shrink-0"
+          style={{ background: "rgba(34,197,94,0.1)", color: "#4ade80" }}
+          onClick={onMobileClose}
+          aria-label="Close menu"
+        >
+          <X size={14} />
+        </button>
       </div>
 
       {/* Divider */}
@@ -101,6 +128,7 @@ export function Sidebar({ user }: SidebarProps) {
                     label={child.label}
                     active={isActive(child.href)}
                     collapsed={collapsed}
+                    onNavigate={onMobileClose}
                   />
                 ))}
               </div>
@@ -114,6 +142,7 @@ export function Sidebar({ user }: SidebarProps) {
               label={item.label}
               active={isActive(item.href!)}
               collapsed={collapsed}
+              onNavigate={onMobileClose}
             />
           );
         })}
@@ -132,11 +161,7 @@ export function Sidebar({ user }: SidebarProps) {
           >
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center font-bold shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #15803d, #22c55e)",
-                color: "#fff",
-                fontSize: "10px",
-              }}
+              style={{ background: "linear-gradient(135deg, #15803d, #22c55e)", color: "#fff", fontSize: "10px" }}
             >
               {user.name ? getInitials(user.name) : "?"}
             </div>
@@ -159,12 +184,15 @@ export function Sidebar({ user }: SidebarProps) {
             collapsed={collapsed}
             onClick={() => signOut({ callbackUrl: "/login" })}
           />
-          <BottomButton
-            icon={collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
-            label="Collapse"
-            collapsed={collapsed}
-            onClick={() => setCollapsed(!collapsed)}
-          />
+          {/* Collapse button — desktop only */}
+          <div className="hidden md:block">
+            <BottomButton
+              icon={collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+              label="Collapse"
+              collapsed={collapsed}
+              onClick={() => setCollapsed(!collapsed)}
+            />
+          </div>
         </div>
       </div>
     </aside>
@@ -177,12 +205,14 @@ function NavLink({
   label,
   active,
   collapsed,
+  onNavigate,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   active: boolean;
   collapsed: boolean;
+  onNavigate?: () => void;
 }) {
   const activeStyle = active
     ? collapsed
@@ -193,6 +223,7 @@ function NavLink({
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className="group relative flex items-center gap-2.5 rounded-xl py-2 pl-[10px] pr-2 transition-all duration-150"
       style={activeStyle}
       onMouseEnter={e => {
@@ -209,19 +240,13 @@ function NavLink({
       }}
       title={collapsed ? label : undefined}
     >
-      {/* Left bar — only in expanded mode */}
       {active && !collapsed && (
         <span
           className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full"
           style={{ height: "60%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }}
         />
       )}
-
-      <Icon
-        size={17}
-        className="shrink-0"
-        style={{ color: active ? "#22c55e" : "inherit" }}
-      />
+      <Icon size={17} className="shrink-0" style={{ color: active ? "#22c55e" : "inherit" }} />
       {!collapsed && (
         <span className="truncate font-medium" style={{ fontSize: "13px" }}>{label}</span>
       )}

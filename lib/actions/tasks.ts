@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { createTaskSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
+import { notifyTaskCreated } from "@/lib/actions/notifications";
 
 export async function getTasks({
   status,
@@ -74,6 +75,16 @@ export async function createTask(data: unknown) {
       contactId: task.contactId ?? undefined,
       leadId: task.leadId ?? undefined,
     },
+  });
+
+  // Fire-and-forget — don't block task creation on notification delivery
+  notifyTaskCreated({
+    taskId: task.id,
+    taskTitle: task.title,
+    creatorId: (session.user as any).id,
+    creatorRole: (session.user as any).role ?? "EMPLOYEE",
+    creatorName: session.user.name ?? "Someone",
+    assigneeId: task.ownerId ?? null,
   });
 
   revalidatePath("/tasks");

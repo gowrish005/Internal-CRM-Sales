@@ -75,6 +75,7 @@ model User {
   image         String?
   isActive      Boolean   @default(true)
   branchId      String?   @db.ObjectId
+  fcmToken      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -90,6 +91,21 @@ model User {
   accounts      Account[]
   sessions      Session[]
   managedBranches Branch[] @relation("BranchManager")
+  notifications Notification[]
+}
+
+model Notification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  title       String
+  body        String
+  type        String
+  taskId      String?  @db.ObjectId
+  leadId      String?  @db.ObjectId
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {

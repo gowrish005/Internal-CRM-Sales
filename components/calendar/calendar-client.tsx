@@ -8,6 +8,8 @@ import {
   isSameDay, isSameMonth, isToday, eachDayOfInterval, startOfDay, endOfDay, parseISO,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { createEvent, cancelEvent } from "@/lib/actions/events";
 
 type View = "week" | "month" | "day" | "agenda";
@@ -22,9 +24,10 @@ interface Props {
   branches: any[];
   contacts: any[];
   currentUserId?: string;
+  currentUserRole?: string;
 }
 
-export function CalendarClient({ events: initialEvents, users, branches, contacts, currentUserId }: Props) {
+export function CalendarClient({ events: initialEvents, users, branches, contacts, currentUserId, currentUserRole }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [view, setView] = useState<View>("week");
   const [current, setCurrent] = useState(new Date());
@@ -62,7 +65,11 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
     });
   }
 
-  const founders = users.filter((u: any) => u.role === "FOUNDER" || u.role === "ADMIN");
+  // Admin sees every other user's calendar; others see fellow founders/admins. Never list self (that's "My Calendar").
+  const otherCalendars = users.filter((u: any) =>
+    u.id !== currentUserId &&
+    (currentUserRole === "ADMIN" || u.role === "FOUNDER" || u.role === "ADMIN")
+  );
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] space-y-3">
@@ -103,7 +110,7 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
           >
             <option value="all">All Calendars</option>
             <option value={currentUserId || ""}>My Calendar</option>
-            {founders.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {otherCalendars.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <div className="flex rounded-md border overflow-hidden" style={{ borderColor: "var(--border)" }}>
             {(["day", "week", "month", "agenda"] as View[]).map((v) => (
@@ -432,12 +439,16 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
   });
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
 
-  function onStartChange(val: string) {
-    set("startAt", val);
-    if (val) {
-      const end = new Date(val);
-      end.setHours(end.getHours() + 1);
-      set("endAt", format(end, "yyyy-MM-dd'T'HH:mm"));
+  const toLocal = (dt: Date) => format(dt, "yyyy-MM-dd'T'HH:mm");
+
+  function onStartChange(dt: Date | null) {
+    if (!dt) return;
+    set("startAt", toLocal(dt));
+    // Keep end 1h after start if end is before/equal new start
+    const curEnd = form.endAt ? new Date(form.endAt) : null;
+    if (!curEnd || curEnd <= dt) {
+      const end = new Date(dt.getTime() + 60 * 60 * 1000);
+      set("endAt", toLocal(end));
     }
   }
 
@@ -467,26 +478,50 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
             <F label="Type"><select value={form.type} onChange={(e) => set("type", e.target.value)} className="fi">{["MEETING","CALL","EVENT","FOLLOW_UP"].map((t) => <option key={t} value={t}>{t.replace("_"," ")}</option>)}</select></F>
             <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
             <F label="Start Time">
-              <input type="datetime-local" value={form.startAt} onChange={(e) => onStartChange(e.target.value)} required className="fi" />
+              <DatePicker
+                selected={form.startAt ? new Date(form.startAt) : null}
+                onChange={onStartChange}
+                showTimeSelect
+                timeIntervals={15}
+                minDate={new Date()}
+                dateFormat="MMM d, yyyy  h:mm aa"
+                timeFormat="h:mm aa"
+                placeholderText="Pick start"
+                className="fi"
+                popperClassName="hc-dp-popper"
+                wrapperClassName="w-full"
+              />
             </F>
             <F label="End Time">
-              <input type="datetime-local" value={form.endAt} onChange={(e) => set("endAt", e.target.value)} required className="fi" />
-              <div className="flex gap-1 mt-1">
+              <DatePicker
+                selected={form.endAt ? new Date(form.endAt) : null}
+                onChange={(dt: Date | null) => dt && set("endAt", toLocal(dt))}
+                showTimeSelect
+                timeIntervals={15}
+                minDate={form.startAt ? new Date(form.startAt) : new Date()}
+                dateFormat="MMM d, yyyy  h:mm aa"
+                timeFormat="h:mm aa"
+                placeholderText="Pick end"
+                className="fi"
+                popperClassName="hc-dp-popper"
+                wrapperClassName="w-full"
+              />
+              <div className="flex gap-1 mt-1.5">
                 {quickDurations.map((min) => (
                   <button
                     key={min}
                     type="button"
-                    className="px-1.5 py-0.5 rounded text-xs border"
+                    className="px-2 py-0.5 rounded-md text-xs border transition-colors"
                     style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
                     onClick={() => {
                       if (form.startAt) {
                         const end = new Date(form.startAt);
                         end.setMinutes(end.getMinutes() + min);
-                        set("endAt", format(end, "yyyy-MM-dd'T'HH:mm"));
+                        set("endAt", toLocal(end));
                       }
                     }}
                   >
-                    {min}m
+                    +{min}m
                   </button>
                 ))}
               </div>
@@ -528,7 +563,29 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
             </button>
           </div>
         </form>
-        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1);opacity:0.55;cursor:pointer}input[type="date"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1);opacity:0.55;cursor:pointer}`}</style>
+        <style>{`
+          .fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}
+          input[type="datetime-local"]::-webkit-calendar-picker-indicator,input[type="date"]::-webkit-calendar-picker-indicator{filter:brightness(0) invert(1);opacity:0.55;cursor:pointer}
+          .react-datepicker{background:#111e14;border:1px solid #1e3322;font-family:inherit;color:#e8e8e8}
+          .react-datepicker__header{background:#0f1a12;border-bottom:1px solid #1e3322}
+          .react-datepicker__current-month,.react-datepicker-time__header,.react-datepicker__day-name{color:#e8e8e8}
+          .react-datepicker__day{color:#c8c8c8}
+          .react-datepicker__day:hover{background:#1a2e1e}
+          .react-datepicker__day--selected,.react-datepicker__day--keyboard-selected{background:#22c55e!important;color:#071209!important}
+          .react-datepicker__day--disabled{color:#3a4a3d}
+          .react-datepicker__time-container{border-left:1px solid #1e3322}
+          .react-datepicker__time,.react-datepicker__time-box,.react-datepicker__time-list{background:#111e14!important}
+          .react-datepicker__header--time{background:#0f1a12!important}
+          .react-datepicker-time__header{color:#e8e8e8}
+          .react-datepicker__time-list-item{color:#c8c8c8!important}
+          .react-datepicker__time-list-item:hover{background:#1a2e1e!important}
+          .react-datepicker__time-list-item--selected{background:#22c55e!important;color:#071209!important}
+          .react-datepicker__time-list-item--disabled{color:#3a4a3d!important}
+          .react-datepicker__time-list::-webkit-scrollbar{width:6px}
+          .react-datepicker__time-list::-webkit-scrollbar-thumb{background:#1e3322;border-radius:3px}
+          .react-datepicker__triangle{display:none}
+          .react-datepicker__navigation-icon::before{border-color:#4ade80}
+        `}</style>
       </div>
     </div>
   );

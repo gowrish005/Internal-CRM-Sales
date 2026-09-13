@@ -118,3 +118,25 @@ body {
   color: #22c55e;
   border-color: #22c55e;
 }
+
+/* Native date/time pickers — dark themed everywhere */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"],
+input[type="week"] {
+  color-scheme: dark;
+}
+
+/* Sidebar width — mobile always full, desktop respects collapsed */
+aside[data-collapsed="false"] {
+  width: var(--sidebar-width);
+}
+@media (min-width: 768px) {
+  aside[data-collapsed="true"] {
+    width: var(--sidebar-width-collapsed);
+  }
+  aside[data-collapsed="false"] {
+    width: var(--sidebar-width);
+  }
+}

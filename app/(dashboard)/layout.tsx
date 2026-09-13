@@ -1,8 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Topbar } from "@/components/layout/topbar";
-import { PageTransition } from "@/components/layout/page-transition";
+import { LayoutShell } from "@/components/layout/layout-shell";
 
 export default async function DashboardLayout({
   children,
@@ -13,14 +11,8 @@ export default async function DashboardLayout({
   if (!session?.user) redirect("/login");
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar user={session.user as any} />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-6" style={{ background: "var(--background)" }}>
-          <PageTransition>{children}</PageTransition>
-        </main>
-      </div>
-    </div>
+    <LayoutShell user={session.user as any}>
+      {children}
+    </LayoutShell>
   );
 }

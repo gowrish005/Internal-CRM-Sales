@@ -26,6 +26,7 @@ export default async function CalendarPage() {
       branches={branches as any}
       contacts={contacts as any}
       currentUserId={(session?.user as any)?.id}
+      currentUserRole={(session?.user as any)?.role}
     />
   );
 }

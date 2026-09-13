@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, X } from "lucide-react";
+import { Search, X, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface TopbarProps {
   title?: string;
+  notificationBell?: React.ReactNode;
+  onMenuClick?: () => void;
 }
 
-export function Topbar({ title }: TopbarProps) {
+export function Topbar({ title, notificationBell, onMenuClick }: TopbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -34,6 +36,17 @@ export function Topbar({ title }: TopbarProps) {
           height: "52px",
         }}
       >
+        {/* Hamburger — mobile only */}
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="flex md:hidden items-center justify-center w-8 h-8 rounded-lg mr-1 transition-colors"
+            style={{ background: "#0f1a12", border: "1px solid #1e3322", color: "var(--muted-foreground)" }}
+          >
+            <Menu size={15} />
+          </button>
+        )}
+
         {title && (
           <h1 className="text-sm font-semibold flex-1 tracking-tight" style={{ color: "var(--foreground)" }}>
             {title}
@@ -61,6 +74,8 @@ export function Topbar({ title }: TopbarProps) {
             ⌘K
           </kbd>
         </button>
+
+        {notificationBell}
 
       </header>
 

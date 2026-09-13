@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2 } from "lucide-react";
 import { createLead, updateLeadStatus, updateLead, archiveLead, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
@@ -362,43 +363,175 @@ function LeadEditModal({ lead, users, contacts, onSubmit, onClose, loading }: an
   );
 }
 
+const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
+  ADMIN:    { bg: "rgba(251,191,36,0.12)",  text: "#fbbf24" },
+  FOUNDER:  { bg: "rgba(167,139,250,0.12)", text: "#a78bfa" },
+  EMPLOYEE: { bg: "rgba(34,197,94,0.10)",   text: "#4ade80" },
+};
+
+function getInitialsFD(name: string) {
+  return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
 function DivideModal({ users, totalLeads, onSubmit, onClose, loading }: any) {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const perUser = selectedUsers.length > 0 ? Math.ceil(totalLeads / selectedUsers.length) : 0;
+
+  const filtered = users.filter((u: any) =>
+    u.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const allFilteredSelected = filtered.length > 0 && filtered.every((u: any) => selectedUsers.includes(u.id));
 
   function toggle(id: string) {
     setSelectedUsers((prev) => prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]);
   }
 
+  function toggleAll() {
+    if (allFilteredSelected) {
+      setSelectedUsers((prev) => prev.filter((id) => !filtered.some((u: any) => u.id === id)));
+    } else {
+      const newIds = filtered.map((u: any) => u.id);
+      setSelectedUsers((prev) => Array.from(new Set([...prev, ...newIds])));
+    }
+  }
+
   return (
     <Modal title="Divide Leads" onClose={onClose}>
       <div className="p-5 space-y-4">
-        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          {totalLeads} total leads. Select users to divide them evenly.
-        </p>
-        <div className="space-y-2 max-h-52 overflow-y-auto">
-          {users.map((u: any) => (
-            <label key={u.id} className="flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-[var(--secondary)]">
-              <input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggle(u.id)} />
-              <span className="text-sm" style={{ color: "var(--foreground)" }}>{u.name}</span>
-              <span className="text-xs ml-auto" style={{ color: "var(--muted-foreground)" }}>{u.role}</span>
-            </label>
-          ))}
+        {/* Summary bar */}
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3"
+          style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.12)" }}
+        >
+          <div className="flex-1">
+            <p className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>{totalLeads} leads</p>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(34,197,94,0.55)" }}>
+              {selectedUsers.length > 0
+                ? `~${perUser} per user across ${selectedUsers.length} selected`
+                : "Select users below to distribute"}
+            </p>
+          </div>
+          {selectedUsers.length > 0 && (
+            <div
+              className="flex items-center justify-center rounded-lg px-3 py-1 font-bold text-sm"
+              style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+            >
+              {selectedUsers.length} selected
+            </div>
+          )}
         </div>
-        {selectedUsers.length > 0 && (
-          <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-            ~{perUser} leads per user ({selectedUsers.length} users)
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-sm" style={{ color: "var(--muted-foreground)", background: "var(--secondary)" }}>Cancel</button>
+
+        {/* Search + Select All row */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(255,255,255,0.25)" }}>
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users…"
+              className="w-full rounded-xl pl-9 pr-3 py-2 text-sm outline-none"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "#e8e8e8",
+              }}
+              onFocus={e => (e.currentTarget.style.borderColor = "rgba(34,197,94,0.3)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+            style={{
+              background: allFilteredSelected ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+              color: allFilteredSelected ? "#4ade80" : "rgba(180,180,180,0.7)",
+              border: `1px solid ${allFilteredSelected ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.08)"}`,
+            }}
+          >
+            {allFilteredSelected ? "Deselect all" : "Select all"}
+          </button>
+        </div>
+
+        {/* User cards */}
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-0.5">
+          {filtered.length === 0 ? (
+            <p className="text-center py-6 text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>No users match</p>
+          ) : filtered.map((u: any) => {
+            const selected = selectedUsers.includes(u.id);
+            const roleStyle = ROLE_COLORS[u.role] ?? { bg: "rgba(150,150,150,0.1)", text: "#aaa" };
+            return (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => toggle(u.id)}
+                className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-150 text-left"
+                style={{
+                  background: selected ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${selected ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.06)"}`,
+                  boxShadow: selected ? "0 0 0 1px rgba(34,197,94,0.1) inset" : "none",
+                }}
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center font-bold shrink-0 text-xs"
+                  style={{
+                    background: selected ? "linear-gradient(135deg, #15803d, #22c55e)" : "rgba(255,255,255,0.06)",
+                    color: selected ? "#fff" : "#888",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  {getInitialsFD(u.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: selected ? "#e8e8e8" : "#aaa" }}>
+                    {u.name}
+                  </p>
+                </div>
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-md shrink-0"
+                  style={{ background: roleStyle.bg, color: roleStyle.text, letterSpacing: "0.04em" }}
+                >
+                  {u.role}
+                </span>
+                <div
+                  className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-150"
+                  style={{
+                    background: selected ? "#22c55e" : "rgba(255,255,255,0.06)",
+                    border: `1.5px solid ${selected ? "#22c55e" : "rgba(255,255,255,0.12)"}`,
+                    boxShadow: selected ? "0 0 8px rgba(34,197,94,0.4)" : "none",
+                  }}
+                >
+                  {selected && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4L3.5 6.5L9 1.5" stroke="#071209" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            style={{ background: "rgba(255,255,255,0.05)", color: "rgba(180,180,180,0.7)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            Cancel
+          </button>
           <button
             onClick={() => onSubmit(selectedUsers)}
             disabled={loading || selectedUsers.length === 0}
-            className="px-3 py-1.5 rounded-md text-sm font-medium disabled:opacity-50"
-            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
+            style={{ background: selectedUsers.length > 0 ? "#22c55e" : "rgba(34,197,94,0.2)", color: selectedUsers.length > 0 ? "#071209" : "#4ade80" }}
           >
-            {loading ? "Dividing..." : "Divide Leads"}
+            {loading ? "Dividing…" : "Divide Leads"}
           </button>
         </div>
       </div>
@@ -502,16 +635,36 @@ function CSVImportModal({ users, onSubmit, onClose, loading }: any) {
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-      <div className="w-full max-w-md rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{title}</h2>
-          <button onClick={onClose} style={{ color: "var(--muted-foreground)", fontSize: 20, lineHeight: 1 }}>×</button>
+  // Portal to document.body so fixed positioning isn't confined by parent stacking contexts
+  // (PageTransition uses will-change: transform which creates a new containing block)
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border shadow-2xl"
+        style={{ background: "#111e14", borderColor: "#1e3322" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#1e3322" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>{title}</h2>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors"
+            style={{ color: "var(--muted-foreground)", background: "rgba(255,255,255,0.05)" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+          >
+            ×
+          </button>
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

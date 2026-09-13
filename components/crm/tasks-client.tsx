@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { format, isPast, isToday } from "date-fns";
 import { Plus, CheckCircle, Circle, X } from "lucide-react";
@@ -49,9 +50,15 @@ export function TasksClient({ tasks: initial, users, branches, contacts, leads, 
   const filtered = tasks.filter(filterTasks).filter((t) => !myTasksOnly || t.ownerId === currentUserId);
 
   async function handleCreate(data: any) {
+    const { ownerIds, ...rest } = data;
     startTransition(async () => {
       try {
-        await createTask(data);
+        if (Array.isArray(ownerIds) && ownerIds.length > 0) {
+          // One task per selected assignee — each gets their own notification
+          await Promise.all(ownerIds.map((ownerId: string) => createTask({ ...rest, ownerId })));
+        } else {
+          await createTask({ ...rest, ownerId: undefined });
+        }
         router.refresh();
         setShowForm(false);
       } catch (err: any) {
@@ -189,33 +196,89 @@ export function TasksClient({ tasks: initial, users, branches, contacts, leads, 
       </div>
 
       {showForm && (
-        <TaskForm users={users} branches={branches} contacts={contacts} leads={leads} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+        <TaskForm users={users} contacts={contacts} leads={leads} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
     </div>
   );
 }
 
-function TaskForm({ users, branches, contacts, leads, onSubmit, onClose, loading }: any) {
+function TaskForm({ users, contacts, leads, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
-    title: "", description: "", ownerId: "", branchId: "", priority: "MEDIUM",
+    title: "", description: "", priority: "MEDIUM",
     status: "TODO", dueAt: "", contactId: "", leadId: "",
   });
+  const [ownerIds, setOwnerIds] = useState<string[]>([]);
   const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const toggleOwner = (id: string) =>
+    setOwnerIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-      <div className="w-full max-w-md rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Add Task</h2>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border shadow-2xl max-h-[90vh] overflow-y-auto"
+        style={{ background: "#111e14", borderColor: "#1e3322" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0" style={{ borderColor: "#1e3322", background: "#111e14" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>Add Task</h2>
           <button onClick={onClose} style={{ color: "var(--muted-foreground)" }}><X size={18} /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, ownerId: form.ownerId || undefined, branchId: form.branchId || undefined, contactId: form.contactId || undefined, leadId: form.leadId || undefined, dueAt: form.dueAt || undefined }); }} className="p-5 space-y-3">
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, ownerIds, contactId: form.contactId || undefined, leadId: form.leadId || undefined, dueAt: form.dueAt || undefined }); }} className="p-5 space-y-3">
           <F label="Title" required><input value={form.title} onChange={(e) => set("title", e.target.value)} required className="fi" /></F>
+
+          {/* Assign to — multi-select */}
+          <F label={`Assign to${ownerIds.length > 0 ? ` (${ownerIds.length})` : ""}`}>
+            <div className="flex flex-wrap gap-1.5">
+              {(() => {
+                const allOn = users.length > 0 && ownerIds.length === users.length;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setOwnerIds(allOn ? [] : users.map((u: any) => u.id))}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+                    style={{
+                      background: allOn ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.04)",
+                      color: allOn ? "#4ade80" : "rgba(200,200,200,0.7)",
+                      border: `1px solid ${allOn ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.12)"}`,
+                    }}
+                  >
+                    {allOn ? "✓ All" : "All"}
+                  </button>
+                );
+              })()}
+              {users.map((u: any) => {
+                const on = ownerIds.includes(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => toggleOwner(u.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                    style={{
+                      background: on ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)",
+                      color: on ? "#4ade80" : "rgba(200,200,200,0.6)",
+                      border: `1px solid ${on ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    }}
+                  >
+                    {on ? "✓ " : ""}{u.name}
+                  </button>
+                );
+              })}
+            </div>
+          </F>
+
           <div className="grid grid-cols-2 gap-3">
-            <F label="Owner"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
             <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
-            <F label="Due Date"><input type="date" value={form.dueAt} onChange={(e) => set("dueAt", e.target.value)} className="fi" /></F>
-            <F label="Branch"><select value={form.branchId} onChange={(e) => set("branchId", e.target.value)} className="fi"><option value="">None</option>{branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></F>
+            <F label="Due Date"><input type="date" min={todayStr} value={form.dueAt} onChange={(e) => set("dueAt", e.target.value)} className="fi" /></F>
             <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
             <F label="Lead"><select value={form.leadId} onChange={(e) => set("leadId", e.target.value)} className="fi"><option value="">None</option>{leads.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></F>
           </div>
@@ -227,9 +290,10 @@ function TaskForm({ users, branches, contacts, leads, onSubmit, onClose, loading
             </button>
           </div>
         </form>
-        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none}`}</style>
+        <style>{`.fi{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:13px;background:var(--background);color:var(--foreground);outline:none;color-scheme:dark}.fi::-webkit-calendar-picker-indicator{opacity:0.7;cursor:pointer}`}</style>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
