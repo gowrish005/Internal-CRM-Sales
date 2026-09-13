@@ -8,6 +8,7 @@ import {
   isSameDay, isSameMonth, isToday, eachDayOfInterval, startOfDay, endOfDay, parseISO,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { createEvent, cancelEvent } from "@/lib/actions/events";
@@ -21,13 +22,12 @@ const EVENT_COLORS: Record<string, string> = {
 interface Props {
   events: any[];
   users: any[];
-  branches: any[];
   contacts: any[];
   currentUserId?: string;
   currentUserRole?: string;
 }
 
-export function CalendarClient({ events: initialEvents, users, branches, contacts, currentUserId, currentUserRole }: Props) {
+export function CalendarClient({ events: initialEvents, users, contacts, currentUserId, currentUserRole }: Props) {
   const [events, setEvents] = useState(initialEvents);
   const [view, setView] = useState<View>("week");
   const [current, setCurrent] = useState(new Date());
@@ -151,7 +151,6 @@ export function CalendarClient({ events: initialEvents, users, branches, contact
       {showForm && (
         <EventForm
           users={users}
-          branches={branches}
           contacts={contacts}
           defaultDate={formDate}
           onSubmit={handleCreate}
@@ -374,10 +373,15 @@ function EventCard({ event, onClick }: { event: any; onClick: () => void }) {
 
 function EventDetail({ event, onClose, onCancel }: { event: any; onClose: () => void; onCancel: (id: string) => void }) {
   const color = EVENT_COLORS[event.type] || "#6b7280";
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-      <div className="w-full max-w-md rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)", borderLeft: `4px solid ${color}` }}>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl border shadow-2xl" style={{ background: "#111e14", borderColor: "#1e3322" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#1e3322", borderLeft: `4px solid ${color}` }}>
           <div>
             <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{event.title}</h2>
             <p className="text-xs" style={{ color }}>
@@ -391,7 +395,6 @@ function EventDetail({ event, onClose, onCancel }: { event: any; onClose: () => 
           <Row label="Time" value={`${format(new Date(event.startAt), "HH:mm")} – ${format(new Date(event.endAt), "HH:mm")}`} />
           {event.organizer && <Row label="Organizer" value={event.organizer.name} />}
           {event.participants?.length > 0 && <Row label="Participants" value={event.participants.map((p: any) => p.name).join(", ")} />}
-          {event.branch && <Row label="Branch" value={event.branch.name} />}
           {event.contact && <Row label="Contact" value={`${event.contact.firstName} ${event.contact.lastName}`} />}
           {event.location && <Row label="Location" value={event.location} />}
           {event.meetingLink && <Row label="Link" value={event.meetingLink} />}
@@ -407,7 +410,8 @@ function EventDetail({ event, onClose, onCancel }: { event: any; onClose: () => 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -421,7 +425,7 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, loading }: any) {
+function EventForm({ users, contacts, defaultDate, onSubmit, onClose, loading }: any) {
   const d = defaultDate ?? new Date();
   const dateStr = format(d, "yyyy-MM-dd");
   const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
@@ -454,10 +458,15 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
 
   const quickDurations = [15, 30, 45, 60];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-      <div className="w-full max-w-lg rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col max-h-[90vh]" style={{ background: "#111e14", borderColor: "#1e3322" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#1e3322" }}>
           <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>New Event</h2>
           <button onClick={onClose} style={{ color: "var(--muted-foreground)" }}><X size={18} /></button>
         </div>
@@ -549,7 +558,7 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
               ))}
             </div>
             {form.locationType === "offline" ? (
-              <input value={form.location} onChange={(e) => set("location", e.target.value)} className="fi" placeholder="Office, branch, city..." />
+              <input value={form.location} onChange={(e) => set("location", e.target.value)} className="fi" placeholder="Office, city..." />
             ) : (
               <input value={form.meetingLink} onChange={(e) => set("meetingLink", e.target.value)} className="fi" placeholder="https://meet.google.com/..." />
             )}
@@ -587,7 +596,8 @@ function EventForm({ users, branches, contacts, defaultDate, onSubmit, onClose, 
           .react-datepicker__navigation-icon::before{border-color:#4ade80}
         `}</style>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

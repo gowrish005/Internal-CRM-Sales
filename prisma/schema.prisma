@@ -74,12 +74,10 @@ model User {
   role          Role      @default(EMPLOYEE)
   image         String?
   isActive      Boolean   @default(true)
-  branchId      String?   @db.ObjectId
   fcmToken      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  branch        Branch?   @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   ownedContacts Contact[] @relation("ContactOwner")
   ownedLeads    Lead[]    @relation("LeadOwner")
   ownedTasks    Task[]    @relation("TaskOwner")
@@ -90,7 +88,6 @@ model User {
   activities    Activity[]
   accounts      Account[]
   sessions      Session[]
-  managedBranches Branch[] @relation("BranchManager")
   notifications Notification[]
 }
 
@@ -143,28 +140,6 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model Branch {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  name        String
-  code        String    @unique
-  location    String?
-  address     String?
-  managerId   String?   @db.ObjectId
-  notes       String?
-  tags        String[]
-  isArchived  Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  manager     User?     @relation("BranchManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users       User[]
-  contacts    Contact[]
-  leads       Lead[]
-  meetings    CalendarEvent[]
-  tasks       Task[]
-  branchNotes Note[]    @relation("BranchNotes")
-  activities  Activity[]
-}
 
 model Contact {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
@@ -177,7 +152,6 @@ model Contact {
   linkedin        String?
   location        String?
   image           String?
-  branchId        String?   @db.ObjectId
   ownerId         String?   @db.ObjectId
   leadStatus      LeadStatus @default(NEW)
   leadSource      LeadSource?
@@ -189,7 +163,6 @@ model Contact {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  branch          Branch?   @relation(fields: [branchId], references: [id])
   owner           User?     @relation("ContactOwner", fields: [ownerId], references: [id])
   leads           Lead[]
   meetings        CalendarEvent[]
@@ -201,7 +174,6 @@ model Contact {
 model Lead {
   id              String     @id @default(auto()) @map("_id") @db.ObjectId
   name            String
-  branchId        String?    @db.ObjectId
   contactId       String?    @db.ObjectId
   ownerId         String?    @db.ObjectId
   source          LeadSource?
@@ -216,7 +188,6 @@ model Lead {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  branch          Branch?    @relation(fields: [branchId], references: [id])
   contact         Contact?   @relation(fields: [contactId], references: [id])
   owner           User?      @relation("LeadOwner", fields: [ownerId], references: [id])
   meetings        CalendarEvent[]
@@ -235,7 +206,6 @@ model CalendarEvent {
   location      String?
   meetingLink   String?
   organizerId   String?   @db.ObjectId
-  branchId      String?   @db.ObjectId
   contactId     String?   @db.ObjectId
   leadId        String?   @db.ObjectId
   color         String?
@@ -249,7 +219,6 @@ model CalendarEvent {
   organizer     User?     @relation("EventOrganizer", fields: [organizerId], references: [id])
   participants  User[]    @relation("EventParticipants", fields: [participantIds], references: [id])
   participantIds String[] @db.ObjectId
-  branch        Branch?   @relation(fields: [branchId], references: [id])
   contact       Contact?  @relation(fields: [contactId], references: [id])
   lead          Lead?     @relation(fields: [leadId], references: [id])
   tasks         Task[]
@@ -262,7 +231,6 @@ model Task {
   title       String
   description String?
   ownerId     String?    @db.ObjectId
-  branchId    String?    @db.ObjectId
   priority    Priority   @default(MEDIUM)
   status      TaskStatus @default(TODO)
   dueAt       DateTime?
@@ -274,7 +242,6 @@ model Task {
   updatedAt   DateTime   @updatedAt
 
   owner       User?      @relation("TaskOwner", fields: [ownerId], references: [id])
-  branch      Branch?    @relation(fields: [branchId], references: [id])
   contact     Contact?   @relation(fields: [contactId], references: [id])
   lead        Lead?      @relation(fields: [leadId], references: [id])
   meeting     CalendarEvent? @relation(fields: [meetingId], references: [id])
@@ -286,7 +253,6 @@ model Note {
   content     String
   authorId    String   @db.ObjectId
   contactId   String?  @db.ObjectId
-  branchId    String?  @db.ObjectId
   leadId      String?  @db.ObjectId
   meetingId   String?  @db.ObjectId
   createdAt   DateTime @default(now())
@@ -294,7 +260,6 @@ model Note {
 
   author      User     @relation(fields: [authorId], references: [id])
   contact     Contact? @relation("ContactNotes", fields: [contactId], references: [id])
-  branch      Branch?  @relation("BranchNotes", fields: [branchId], references: [id])
   lead        Lead?    @relation("LeadNotes", fields: [leadId], references: [id])
   meeting     CalendarEvent? @relation("EventNotes", fields: [meetingId], references: [id])
 }
@@ -305,7 +270,6 @@ model Activity {
   description String
   userId      String?      @db.ObjectId
   contactId   String?      @db.ObjectId
-  branchId    String?      @db.ObjectId
   leadId      String?      @db.ObjectId
   meetingId   String?      @db.ObjectId
   taskId      String?      @db.ObjectId
@@ -314,7 +278,6 @@ model Activity {
 
   user        User?        @relation(fields: [userId], references: [id])
   contact     Contact?     @relation(fields: [contactId], references: [id])
-  branch      Branch?      @relation(fields: [branchId], references: [id])
   lead        Lead?        @relation(fields: [leadId], references: [id])
   meeting     CalendarEvent? @relation(fields: [meetingId], references: [id])
   task        Task?        @relation(fields: [taskId], references: [id])

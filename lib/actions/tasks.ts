@@ -9,13 +9,11 @@ import { notifyTaskCreated } from "@/lib/actions/notifications";
 export async function getTasks({
   status,
   ownerId,
-  branchId,
   priority,
   view,
 }: {
   status?: string;
   ownerId?: string;
-  branchId?: string;
   priority?: string;
   view?: "today" | "overdue" | "upcoming" | "completed" | "mine";
 } = {}) {
@@ -35,14 +33,12 @@ export async function getTasks({
 
   if (status) where.status = status;
   if (ownerId) where.ownerId = ownerId;
-  if (branchId) where.branchId = branchId;
   if (priority) where.priority = priority;
 
   return prisma.task.findMany({
     where,
     include: {
       owner: { select: { id: true, name: true } },
-      branch: { select: { id: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true } },
       lead: { select: { id: true, name: true } },
     },

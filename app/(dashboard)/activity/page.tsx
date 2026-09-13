@@ -11,7 +11,6 @@ export default async function ActivityPage() {
     include: {
       user: { select: { id: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true } },
-      branch: { select: { id: true, name: true } },
       lead: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },

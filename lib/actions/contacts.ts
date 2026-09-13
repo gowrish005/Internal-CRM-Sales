@@ -8,14 +8,12 @@ import { revalidatePath } from "next/cache";
 export async function getContacts({
   search,
   status,
-  branchId,
   ownerId,
   page = 1,
   limit = 50,
 }: {
   search?: string;
   status?: string;
-  branchId?: string;
   ownerId?: string;
   page?: number;
   limit?: number;
@@ -33,14 +31,12 @@ export async function getContacts({
     ];
   }
   if (status) where.leadStatus = status;
-  if (branchId) where.branchId = branchId;
   if (ownerId) where.ownerId = ownerId;
 
   const [contacts, total] = await Promise.all([
     prisma.contact.findMany({
       where,
       include: {
-        branch: { select: { id: true, name: true } },
         owner: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -60,7 +56,6 @@ export async function getContact(id: string) {
   return prisma.contact.findUnique({
     where: { id },
     include: {
-      branch: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
       leads: {
         select: { id: true, name: true, status: true, estimatedValue: true },

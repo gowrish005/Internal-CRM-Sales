@@ -9,12 +9,10 @@ export async function getEvents({
   from,
   to,
   userId,
-  branchId,
 }: {
   from?: Date;
   to?: Date;
   userId?: string;
-  branchId?: string;
 } = {}) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
@@ -28,14 +26,12 @@ export async function getEvents({
   if (userId) {
     where.OR = [{ organizerId: userId }, { participantIds: { has: userId } }];
   }
-  if (branchId) where.branchId = branchId;
 
   return prisma.calendarEvent.findMany({
     where,
     include: {
       organizer: { select: { id: true, name: true } },
       participants: { select: { id: true, name: true } },
-      branch: { select: { id: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true } },
       lead: { select: { id: true, name: true } },
     },
@@ -73,7 +69,6 @@ export async function createEvent(data: unknown) {
       userId: (session.user as any).id,
       meetingId: event.id,
       contactId: event.contactId ?? undefined,
-      branchId: event.branchId ?? undefined,
     },
   });
 

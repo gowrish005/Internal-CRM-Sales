@@ -19,12 +19,11 @@ const PRIORITY_COLORS: Record<string, string> = { LOW: "#6b7280", MEDIUM: "#f59e
 
 interface Props {
   leads: any[];
-  branches: any[];
   users: any[];
   contacts: any[];
 }
 
-export function LeadsClient({ leads: initial, branches, users, contacts }: Props) {
+export function LeadsClient({ leads: initial, users, contacts }: Props) {
   const [leads, setLeads] = useState(initial);
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [showForm, setShowForm] = useState(false);
@@ -257,7 +256,7 @@ export function LeadsClient({ leads: initial, branches, users, contacts }: Props
       )}
 
       {showForm && (
-        <LeadForm branches={branches} users={users} contacts={contacts} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+        <LeadForm users={users} contacts={contacts} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
 
       {editingLead && (
@@ -275,7 +274,7 @@ export function LeadsClient({ leads: initial, branches, users, contacts }: Props
   );
 }
 
-function LeadForm({ branches, users, contacts, onSubmit, onClose, loading }: any) {
+function LeadForm({ users, contacts, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
     name: "", contactId: "", ownerId: "", source: "", status: "NEW",
     priority: "MEDIUM", track: "", estimatedValue: "", expectedCloseAt: "", nextFollowUpAt: "",

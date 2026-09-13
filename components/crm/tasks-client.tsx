@@ -21,13 +21,12 @@ const STATUS_COLORS: Record<string, string> = { TODO: "#6b7280", IN_PROGRESS: "#
 interface Props {
   tasks: any[];
   users: any[];
-  branches: any[];
   contacts: any[];
   leads: any[];
   currentUserId?: string;
 }
 
-export function TasksClient({ tasks: initial, users, branches, contacts, leads, currentUserId }: Props) {
+export function TasksClient({ tasks: initial, users, contacts, leads, currentUserId }: Props) {
   const [tasks, setTasks] = useState(initial);
   const [activeView, setActiveView] = useState("all");
   const [myTasksOnly, setMyTasksOnly] = useState(false);

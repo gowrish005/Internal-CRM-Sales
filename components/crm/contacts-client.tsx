@@ -25,12 +25,11 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 interface Props {
   initialContacts: any[];
-  branches: any[];
   users: any[];
   total: number;
 }
 
-export function ContactsClient({ initialContacts, branches, users, total }: Props) {
+export function ContactsClient({ initialContacts, users, total }: Props) {
   const [contacts, setContacts] = useState(initialContacts);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -117,7 +116,7 @@ export function ContactsClient({ initialContacts, branches, users, total }: Prop
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "var(--muted)", borderBottom: `1px solid var(--border)` }}>
-                  {["Name", "Branch", "Designation", "Email", "Phone", "Owner", "Status", "Last Contact", "Follow-up", ""].map((h) => (
+                  {["Name", "Designation", "Email", "Phone", "Owner", "Status", "Last Contact", "Follow-up", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{h}</th>
                   ))}
                 </tr>
@@ -142,7 +141,6 @@ export function ContactsClient({ initialContacts, branches, users, total }: Prop
                         </span>
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.branch?.name || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.designation || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.email || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.phone || "—"}</td>
@@ -185,7 +183,6 @@ export function ContactsClient({ initialContacts, branches, users, total }: Prop
       {/* Form modal */}
       {showForm && (
         <ContactForm
-          branches={branches}
           users={users}
           onSubmit={handleCreate}
           onClose={() => setShowForm(false)}

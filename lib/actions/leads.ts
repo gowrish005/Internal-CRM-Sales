@@ -8,13 +8,11 @@ import { revalidatePath } from "next/cache";
 export async function getLeads({
   search,
   status,
-  branchId,
   ownerId,
   track,
 }: {
   search?: string;
   status?: string;
-  branchId?: string;
   ownerId?: string;
   track?: number;
 } = {}) {
@@ -24,14 +22,12 @@ export async function getLeads({
   const where: any = { isArchived: false };
   if (search) where.name = { contains: search, mode: "insensitive" };
   if (status) where.status = status;
-  if (branchId) where.branchId = branchId;
   if (ownerId) where.ownerId = ownerId;
   if (track) where.track = track;
 
   return prisma.lead.findMany({
     where,
     include: {
-      branch: { select: { id: true, name: true } },
       contact: { select: { id: true, firstName: true, lastName: true } },
       owner: { select: { id: true, name: true } },
     },
@@ -123,7 +119,6 @@ export async function updateLead(id: string, data: unknown) {
       where: { id },
       data: updateData,
       include: {
-        branch: { select: { id: true, name: true } },
         contact: { select: { id: true, firstName: true, lastName: true } },
         owner: { select: { id: true, name: true } },
       },

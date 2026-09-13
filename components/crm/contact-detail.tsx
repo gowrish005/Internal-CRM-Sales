@@ -14,7 +14,7 @@ const STATUS_COLORS: Record<string, string> = {
   PROPOSAL: "#8b5cf6", NEGOTIATION: "#f59e0b", WON: "#059669", LOST: "#dc2626",
 };
 
-export function ContactDetail({ contact, branches, users }: { contact: any; branches: any[]; users: any[] }) {
+export function ContactDetail({ contact, users }: { contact: any; users: any[] }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const [activeTab, setActiveTab] = useState<"activity" | "notes" | "tasks" | "leads">("activity");
@@ -111,7 +111,6 @@ export function ContactDetail({ contact, branches, users }: { contact: any; bran
           <div className="rounded-lg border p-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted-foreground)" }}>CRM Details</h3>
             <dl className="space-y-2 text-sm">
-              <Row label="Branch" value={contact.branch?.name} />
               <Row label="Owner" value={contact.owner?.name} />
               <Row label="Status">
                 <span
@@ -242,7 +241,6 @@ export function ContactDetail({ contact, branches, users }: { contact: any; bran
 
       {editing && (
         <ContactForm
-          branches={branches}
           users={users}
           initial={contact}
           onSubmit={handleUpdate}

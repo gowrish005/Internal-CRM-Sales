@@ -65,9 +65,6 @@ export function ActivityTimeline({ activities }: { activities: any[] }) {
                 {a.contact && (
                   <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>· {a.contact.firstName} {a.contact.lastName}</span>
                 )}
-                {a.branch && (
-                  <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>· {a.branch.name}</span>
-                )}
                 {a.lead && (
                   <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>· {a.lead.name}</span>
                 )}

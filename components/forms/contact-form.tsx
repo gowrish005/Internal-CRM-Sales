@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface Props {
-  branches: any[];
   users: any[];
   onSubmit: (data: any) => void;
   onClose: () => void;
@@ -16,7 +16,7 @@ const STATUSES = ["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","
 const SOURCES = ["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"];
 const PRIORITIES = ["LOW","MEDIUM","HIGH"];
 
-export function ContactForm({ branches, users, onSubmit, onClose, loading, initial }: Props) {
+export function ContactForm({ users, onSubmit, onClose, loading, initial }: Props) {
   const [form, setForm] = useState({
     firstName: initial?.firstName || "",
     lastName: initial?.lastName || "",
@@ -26,7 +26,6 @@ export function ContactForm({ branches, users, onSubmit, onClose, loading, initi
     company: initial?.company || "",
     linkedin: initial?.linkedin || "",
     location: initial?.location || "",
-    branchId: initial?.branchId || "",
     ownerId: initial?.ownerId || "",
     leadStatus: initial?.leadStatus || "NEW",
     leadSource: initial?.leadSource || "",
@@ -43,15 +42,19 @@ export function ContactForm({ branches, users, onSubmit, onClose, loading, initi
     onSubmit({
       ...form,
       leadSource: form.leadSource || undefined,
-      branchId: form.branchId || undefined,
       ownerId: form.ownerId || undefined,
       nextFollowUpAt: form.nextFollowUpAt || undefined,
     });
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
-      <div className="w-full max-w-lg rounded-xl border shadow-xl" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col max-h-[90vh]" style={{ background: "#111e14", borderColor: "#1e3322" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
           <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
             {initial ? "Edit Contact" : "Add Contact"}
@@ -77,12 +80,6 @@ export function ContactForm({ branches, users, onSubmit, onClose, loading, initi
             </Field>
             <Field label="Company">
               <input value={form.company} onChange={(e) => set("company", e.target.value)} className="field-input" />
-            </Field>
-            <Field label="Branch">
-              <select value={form.branchId} onChange={(e) => set("branchId", e.target.value)} className="field-input">
-                <option value="">None</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
             </Field>
             <Field label="Owner">
               <select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="field-input">
@@ -147,7 +144,8 @@ export function ContactForm({ branches, users, onSubmit, onClose, loading, initi
         }
         .field-input:focus { box-shadow: 0 0 0 2px var(--ring)30; }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
 
