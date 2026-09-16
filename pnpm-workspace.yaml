@@ -5,3 +5,12 @@ allowBuilds:
   prisma: true
   protobufjs: true
   unrs-resolver: true
+
+# pnpm <11 ignores allowBuilds; Vercel installs lockfile v9 with pnpm 9/10.
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - protobufjs
+  - unrs-resolver
