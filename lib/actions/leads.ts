@@ -28,7 +28,6 @@ export async function getLeads({
   return prisma.lead.findMany({
     where,
     include: {
-      contact: { select: { id: true, firstName: true, lastName: true } },
       owner: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -109,8 +108,12 @@ export async function updateLead(id: string, data: unknown) {
   if (d.track !== undefined) updateData.track = d.track === null ? null : Number(d.track);
   if (d.estimatedValue !== undefined) updateData.estimatedValue = d.estimatedValue === null ? null : Number(d.estimatedValue);
   if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null;
+  for (const k of ["phone", "email", "college", "branch", "usn"] as const) {
+    if (d[k] !== undefined) updateData[k] = d[k]?.trim() || null;
+  }
+  if (d.passoutYear !== undefined) updateData.passoutYear = d.passoutYear ?? null;
+  if (d.tags !== undefined) updateData.tags = d.tags;
   // ObjectId fields — only set if non-empty string (prevents passing "" to Prisma)
-  if (d.contactId !== undefined) updateData.contactId = d.contactId || null;
   if (d.ownerId !== undefined) updateData.ownerId = d.ownerId || null;
   if (d.source !== undefined) updateData.source = d.source || null;
 
@@ -119,7 +122,6 @@ export async function updateLead(id: string, data: unknown) {
       where: { id },
       data: updateData,
       include: {
-        contact: { select: { id: true, firstName: true, lastName: true } },
         owner: { select: { id: true, name: true } },
       },
     });
@@ -165,7 +167,7 @@ export async function divideLeads(userIds: string[]) {
   return { assigned: leads.length, perUser: Math.ceil(leads.length / userIds.length) };
 }
 
-export async function importLeadsFromCSV(rows: { name: string; status?: string; priority?: string; track?: number; estimatedValue?: number; source?: string; ownerId?: string }[]) {
+export async function importLeadsFromCSV(rows: { name: string; phone?: string; email?: string; college?: string; branch?: string; usn?: string; passoutYear?: number; status?: string; priority?: string; track?: number; estimatedValue?: number; source?: string; ownerId?: string }[]) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
   if (!rows.length) throw new Error("No rows to import");
@@ -179,6 +181,12 @@ export async function importLeadsFromCSV(rows: { name: string; status?: string; 
       prisma.lead.create({
         data: {
           name: row.name,
+          phone: row.phone || undefined,
+          email: row.email || undefined,
+          college: row.college || undefined,
+          branch: row.branch || undefined,
+          usn: row.usn || undefined,
+          passoutYear: row.passoutYear || undefined,
           status: (VALID_STATUS.includes(row.status?.toUpperCase() ?? "") ? row.status!.toUpperCase() : "NEW") as any,
           priority: (VALID_PRIORITY.includes(row.priority?.toUpperCase() ?? "") ? row.priority!.toUpperCase() : "MEDIUM") as any,
           track: row.track && row.track >= 1 && row.track <= 3 ? row.track : undefined,

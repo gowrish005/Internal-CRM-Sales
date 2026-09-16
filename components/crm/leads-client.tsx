@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2 } from "lucide-react";
+import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check } from "lucide-react";
 import { createLead, updateLeadStatus, updateLead, archiveLead, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
 import { formatCurrency } from "@/lib/utils";
 
@@ -16,27 +16,169 @@ const STATUS_COLORS: Record<Status, string> = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = { LOW: "#6b7280", MEDIUM: "#f59e0b", HIGH: "#dc2626" };
+const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const;
+const SOURCES = ["REFERRAL", "WEBSITE", "COLD_OUTREACH", "EVENT", "SOCIAL_MEDIA", "OTHER"] as const;
+
+// Sentinel for "field is empty" options (no owner, no track, …).
+const NONE = "__none__";
+type SortKey = "name" | "phone" | "college" | "owner" | "track" | "status" | "priority" | "value" | "followUp";
+type Sort = { key: SortKey; dir: "asc" | "desc" } | null;
+type FollowUp = "" | "overdue" | "today" | "week" | "set" | "none";
+
+interface Filters {
+  search: string;
+  statuses: string[];
+  priorities: string[];
+  owners: string[];
+  tracks: string[];
+  sources: string[];
+  tags: string[];
+  passoutYears: string[];
+  followUp: FollowUp;
+}
+
+const EMPTY_FILTERS: Filters = { search: "", statuses: [], priorities: [], owners: [], tracks: [], sources: [], tags: [], passoutYears: [], followUp: "" };
+
+/* View, filters and sort persist per browser. Backed by localStorage, with an
+ * in-memory copy so the page still works where storage is blocked. */
+type Prefs = { view: "kanban" | "table"; filters: Filters; sort: Sort };
+const PREFS_KEY = "crm.leads.view";
+const DEFAULT_PREFS: Prefs = { view: "kanban", filters: EMPTY_FILTERS, sort: null };
+const prefsListeners = new Set<() => void>();
+let memoryPrefs: string | null = null;
+
+function readPrefsRaw() {
+  try { return localStorage.getItem(PREFS_KEY) ?? memoryPrefs; } catch { return memoryPrefs; }
+}
+function parsePrefs(raw: string | null): Prefs {
+  try {
+    const saved = raw ? JSON.parse(raw) : null;
+    return saved ? { ...DEFAULT_PREFS, ...saved, filters: { ...EMPTY_FILTERS, ...saved.filters } } : DEFAULT_PREFS;
+  } catch { return DEFAULT_PREFS; }
+}
+function subscribePrefs(cb: () => void) {
+  prefsListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => { prefsListeners.delete(cb); window.removeEventListener("storage", cb); };
+}
+
+function useLeadPrefs() {
+  const raw = useSyncExternalStore(subscribePrefs, readPrefsRaw, () => null);
+  const prefs = useMemo(() => parsePrefs(raw), [raw]);
+  const update = useCallback((fn: (p: Prefs) => Prefs) => {
+    memoryPrefs = JSON.stringify(fn(parsePrefs(readPrefsRaw())));
+    try { localStorage.setItem(PREFS_KEY, memoryPrefs); } catch {}
+    prefsListeners.forEach((cb) => cb());
+  }, []);
+  return [prefs, update] as const;
+}
+
+/** Value a column sorts by; null/"" always sorts last regardless of direction. */
+function sortValue(l: any, key: SortKey): string | number | null {
+  switch (key) {
+    case "name": return l.name?.toLowerCase() || null;
+    case "phone": return l.phone || null;
+    case "college": return l.college?.toLowerCase() || null;
+    case "owner": return l.owner?.name?.toLowerCase() || null;
+    case "track": return l.track ?? null;
+    case "status": return STATUSES.indexOf(l.status); // pipeline order, not alphabetical
+    case "priority": return ["LOW", "MEDIUM", "HIGH"].indexOf(l.priority);
+    case "value": return l.estimatedValue ?? null;
+    case "followUp": return l.nextFollowUpAt ? new Date(l.nextFollowUpAt).getTime() : null;
+  }
+}
+
+function matchesFollowUp(l: any, f: FollowUp) {
+  if (!f) return true;
+  if (f === "none") return !l.nextFollowUpAt;
+  if (!l.nextFollowUpAt) return false;
+  if (f === "set") return true;
+  const at = new Date(l.nextFollowUpAt);
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday); endOfToday.setDate(endOfToday.getDate() + 1);
+  if (f === "overdue") return at < startOfToday;
+  if (f === "today") return at >= startOfToday && at < endOfToday;
+  const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + 7);
+  return at >= startOfToday && at < endOfWeek; // "week" = next 7 days
+}
+
+function applyFilters(leads: any[], f: Filters) {
+  const q = f.search.trim().toLowerCase();
+  return leads.filter((l) => {
+    if (f.statuses.length && !f.statuses.includes(l.status)) return false;
+    if (f.priorities.length && !f.priorities.includes(l.priority)) return false;
+    if (f.owners.length && !f.owners.includes(l.ownerId ?? NONE)) return false;
+    if (f.tracks.length && !f.tracks.includes(l.track ? String(l.track) : NONE)) return false;
+    if (f.sources.length && !f.sources.includes(l.source ?? NONE)) return false;
+    if (f.tags.length && !f.tags.some((t) => l.tags?.includes(t))) return false;
+    if (f.passoutYears.length && !f.passoutYears.includes(l.passoutYear ? String(l.passoutYear) : NONE)) return false;
+    if (!matchesFollowUp(l, f.followUp)) return false;
+    if (q) {
+      const haystack = [l.name, l.phone, l.email, l.college, l.branch, l.usn, l.owner?.name, ...(l.tags ?? [])]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function applySort(leads: any[], sort: Sort) {
+  if (!sort) return leads;
+  const sign = sort.dir === "asc" ? 1 : -1;
+  return [...leads].sort((a, b) => {
+    const va = sortValue(a, sort.key), vb = sortValue(b, sort.key);
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;
+    if (vb === null) return -1;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sign;
+  });
+}
 
 interface Props {
   leads: any[];
   users: any[];
-  contacts: any[];
 }
 
-export function LeadsClient({ leads: initial, users, contacts }: Props) {
+export function LeadsClient({ leads: initial, users }: Props) {
   const [leads, setLeads] = useState(initial);
-  const [view, setView] = useState<"kanban" | "table">("kanban");
+  const [{ view, filters, sort }, updatePrefs] = useLeadPrefs();
+  const setView = (v: Prefs["view"]) => updatePrefs((p) => ({ ...p, view: v }));
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [showDivide, setShowDivide] = useState(false);
   const [showCSV, setShowCSV] = useState(false);
-  const [trackFilter, setTrackFilter] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Status | null>(null);
   const router = useRouter();
 
-  const displayed = trackFilter ? leads.filter((l) => l.track === trackFilter) : leads;
+  const tagOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const l of leads) for (const t of l.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ value: t, label: t, count: n }));
+  }, [leads]);
+  const yearOptions = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const l of leads) if (l.passoutYear) counts.set(l.passoutYear, (counts.get(l.passoutYear) ?? 0) + 1);
+    const opts = [...counts].sort((a, b) => a[0] - b[0]).map(([y, n]) => ({ value: String(y), label: String(y), count: n }));
+    const none = leads.filter((l) => !l.passoutYear).length;
+    return none ? [...opts, { value: NONE, label: "No year", count: none }] : opts;
+  }, [leads]);
+
+  const displayed = useMemo(() => applySort(applyFilters(leads, filters), sort), [leads, filters, sort]);
+  const activeFilterCount =
+    (filters.search.trim() ? 1 : 0) + (filters.followUp ? 1 : 0) +
+    [filters.statuses, filters.priorities, filters.owners, filters.tracks, filters.sources, filters.tags, filters.passoutYears].filter((a) => a.length).length;
+  const set = <K extends keyof Filters>(key: K) => (value: Filters[K]) =>
+    updatePrefs((p) => ({ ...p, filters: { ...p.filters, [key]: value } }));
+
+  function toggleSort(key: SortKey) {
+    // asc -> desc -> off
+    updatePrefs((p) => ({
+      ...p,
+      sort: p.sort?.key !== key ? { key, dir: "asc" } : p.sort.dir === "asc" ? { key, dir: "desc" } : null,
+    }));
+  }
   const byStatus = STATUSES.reduce((acc, s) => {
     acc[s] = displayed.filter((l) => l.status === s);
     return acc;
@@ -114,28 +256,11 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>Leads</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>{displayed.length} leads{trackFilter ? ` · Track ${trackFilter}` : ""}</p>
+          <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+            {activeFilterCount ? `${displayed.length} of ${leads.length} leads` : `${leads.length} leads`}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Track filter */}
-          <div className="flex rounded-md border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-            <button
-              onClick={() => setTrackFilter(null)}
-              className="px-2.5 py-1.5 text-xs"
-              style={{ background: !trackFilter ? "var(--secondary)" : "var(--card)", color: !trackFilter ? "var(--foreground)" : "var(--muted-foreground)" }}
-            >All</button>
-            {[1, 2, 3].map((t) => (
-              <button
-                key={t}
-                onClick={() => setTrackFilter(trackFilter === t ? null : t)}
-                className="px-2.5 py-1.5 text-xs border-l"
-                style={{ borderColor: "var(--border)", background: trackFilter === t ? "var(--secondary)" : "var(--card)", color: trackFilter === t ? "var(--foreground)" : "var(--muted-foreground)" }}
-              >
-                T{t}
-              </button>
-            ))}
-          </div>
-
           {/* View toggle */}
           <div className="flex rounded-md border overflow-hidden" style={{ borderColor: "var(--border)" }}>
             <button onClick={() => setView("kanban")} className="px-2.5 py-1.5" style={{ background: view === "kanban" ? "var(--secondary)" : "var(--card)", color: view === "kanban" ? "var(--foreground)" : "var(--muted-foreground)" }}>
@@ -156,6 +281,62 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
             <Plus size={14} /> Add Lead
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted-foreground)" }} />
+          <input
+            value={filters.search}
+            onChange={(e) => set("search")(e.target.value)}
+            placeholder="Search name, phone, email, college, USN…"
+            className="w-full rounded-md border pl-8 pr-7 py-1.5 text-xs outline-none"
+            style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--foreground)" }}
+          />
+          {filters.search && (
+            <button onClick={() => set("search")("")} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} title="Clear search">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <MultiSelect label="Status" value={filters.statuses} onChange={set("statuses")}
+          options={STATUSES.map((s) => ({ value: s, label: s, color: STATUS_COLORS[s], count: leads.filter((l) => l.status === s).length }))} />
+        <MultiSelect label="Priority" value={filters.priorities} onChange={set("priorities")}
+          options={PRIORITIES.map((p) => ({ value: p, label: p, color: PRIORITY_COLORS[p], count: leads.filter((l) => l.priority === p).length }))} />
+        <MultiSelect label="Owner" value={filters.owners} onChange={set("owners")}
+          options={[
+            ...users.map((u: any) => ({ value: u.id, label: u.name, count: leads.filter((l) => l.ownerId === u.id).length })),
+            { value: NONE, label: "Unassigned", count: leads.filter((l) => !l.ownerId).length },
+          ]} />
+        <MultiSelect label="Track" value={filters.tracks} onChange={set("tracks")}
+          options={[
+            ...[1, 2, 3].map((t) => ({ value: String(t), label: `Track ${t}`, count: leads.filter((l) => l.track === t).length })),
+            { value: NONE, label: "No track", count: leads.filter((l) => !l.track).length },
+          ]} />
+        <MultiSelect label="Source" value={filters.sources} onChange={set("sources")}
+          options={[
+            ...SOURCES.map((s) => ({ value: s, label: s.replace("_", " "), count: leads.filter((l) => l.source === s).length })),
+            { value: NONE, label: "No source", count: leads.filter((l) => !l.source).length },
+          ]} />
+        {tagOptions.length > 0 && (
+          <MultiSelect label="Course" value={filters.tags} onChange={set("tags")} options={tagOptions} searchable />
+        )}
+        {yearOptions.length > 0 && (
+          <MultiSelect label="Passout" value={filters.passoutYears} onChange={set("passoutYears")} options={yearOptions} />
+        )}
+        <SingleSelect label="Follow-up" value={filters.followUp} onChange={set("followUp")}
+          options={[
+            { value: "overdue", label: "Overdue" },
+            { value: "today", label: "Due today" },
+            { value: "week", label: "Next 7 days" },
+            { value: "set", label: "Has follow-up" },
+            { value: "none", label: "No follow-up" },
+          ]} />
+        {activeFilterCount > 0 && (
+          <button onClick={() => updatePrefs((p) => ({ ...p, filters: EMPTY_FILTERS }))} className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }}>
+            <X size={12} /> Clear filters
+          </button>
+        )}
       </div>
 
       {view === "kanban" ? (
@@ -197,7 +378,9 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
                         <Edit2 size={11} />
                       </button>
                     </div>
-                    {lead.contact && <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{lead.contact.firstName} {lead.contact.lastName}</p>}
+                    {(lead.phone || lead.college) && (
+                      <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>{[lead.phone, lead.college].filter(Boolean).join(" · ")}</p>
+                    )}
                     <div className="flex items-center justify-between mt-2">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-medium" style={{ color: PRIORITY_COLORS[lead.priority] }}>{lead.priority}</span>
@@ -218,18 +401,41 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "var(--muted)", borderBottom: "1px solid var(--border)" }}>
-                  {["Name", "Contact", "Owner", "Track", "Status", "Priority", "Value", "Follow-up", ""].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{h}</th>
-                  ))}
+                  {([
+                    ["name", "Name"], ["phone", "Phone"], ["college", "College"], ["owner", "Owner"], ["track", "Track"],
+                    ["status", "Status"], ["priority", "Priority"], ["value", "Value"], ["followUp", "Follow-up"],
+                  ] as [SortKey, string][]).map(([key, label]) => {
+                    const active = sort?.key === key;
+                    const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
+                    return (
+                      <th key={key} className="text-left px-4 py-2.5 text-xs font-medium" aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                        <button onClick={() => toggleSort(key)} className="flex items-center gap-1 hover:text-[var(--foreground)]" style={{ color: active ? "var(--foreground)" : "var(--muted-foreground)" }}>
+                          {label}
+                          <Icon size={12} style={{ opacity: active ? 1 : 0.4 }} />
+                        </button>
+                      </th>
+                    );
+                  })}
+                  <th />
                 </tr>
               </thead>
               <tbody style={{ background: "var(--card)" }}>
                 {displayed.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>No leads yet</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>{leads.length ? "No leads match these filters" : "No leads yet"}</td></tr>
                 ) : displayed.map((l) => (
                   <tr key={l.id} className="border-b hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
-                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--foreground)" }}>{l.name}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.contact ? `${l.contact.firstName} ${l.contact.lastName}` : "—"}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium" style={{ color: "var(--foreground)" }}>{l.name}</div>
+                      {l.usn && <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>{l.usn}</div>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: "var(--muted-foreground)" }}>
+                      {l.phone ? <a href={`tel:${l.phone}`} className="hover:underline" style={{ color: "var(--foreground)" }}>{l.phone}</a> : "—"}
+                      {l.email && <div className="opacity-75">{l.email}</div>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs max-w-[260px]" style={{ color: "var(--muted-foreground)" }}>
+                      {l.college ? <div className="truncate" style={{ color: "var(--foreground)" }} title={l.college}>{l.college}</div> : "—"}
+                      {(l.branch || l.passoutYear) && <div className="truncate opacity-75">{[l.branch, l.passoutYear && `Passout ${l.passoutYear}`].filter(Boolean).join(" · ")}</div>}
+                    </td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.owner?.name || "—"}</td>
                     <td className="px-4 py-2.5 text-xs">
                       {l.track ? <span className="px-1.5 py-0.5 rounded" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>T{l.track}</span> : "—"}
@@ -256,11 +462,11 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
       )}
 
       {showForm && (
-        <LeadForm users={users} contacts={contacts} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+        <LeadForm users={users} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
 
       {editingLead && (
-        <LeadEditModal lead={editingLead} users={users} contacts={contacts} onSubmit={(data: any) => handleUpdate(editingLead.id, data)} onClose={() => setEditingLead(null)} loading={isPending} />
+        <LeadEditModal lead={editingLead} users={users} onSubmit={(data: any) => handleUpdate(editingLead.id, data)} onClose={() => setEditingLead(null)} loading={isPending} />
       )}
 
       {showDivide && (
@@ -274,9 +480,9 @@ export function LeadsClient({ leads: initial, users, contacts }: Props) {
   );
 }
 
-function LeadForm({ users, contacts, onSubmit, onClose, loading }: any) {
+function LeadForm({ users, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
-    name: "", contactId: "", ownerId: "", source: "", status: "NEW",
+    name: "", phone: "", email: "", college: "", branch: "", usn: "", passoutYear: "", ownerId: "", source: "", status: "NEW",
     priority: "MEDIUM", track: "", estimatedValue: "", expectedCloseAt: "", nextFollowUpAt: "",
   });
   const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
@@ -289,7 +495,7 @@ function LeadForm({ users, contacts, onSubmit, onClose, loading }: any) {
           ...form,
           estimatedValue: form.estimatedValue ? parseFloat(form.estimatedValue) : undefined,
           track: form.track ? parseInt(form.track) : undefined,
-          contactId: form.contactId || undefined,
+          passoutYear: form.passoutYear ? parseInt(form.passoutYear) : undefined,
           ownerId: form.ownerId || undefined,
           source: form.source || undefined,
           expectedCloseAt: form.expectedCloseAt || undefined,
@@ -298,7 +504,14 @@ function LeadForm({ users, contacts, onSubmit, onClose, loading }: any) {
       }} className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
         <F label="Lead Name" required><input value={form.name} onChange={(e) => set("name", e.target.value)} required className="fi" /></F>
         <div className="grid grid-cols-2 gap-3">
-          <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+          <F label="Phone"><input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className="fi" /></F>
+          <F label="Email"><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className="fi" /></F>
+          <F label="College"><input value={form.college} onChange={(e) => set("college", e.target.value)} className="fi" /></F>
+          <F label="Branch"><input value={form.branch} onChange={(e) => set("branch", e.target.value)} className="fi" /></F>
+          <F label="USN"><input value={form.usn} onChange={(e) => set("usn", e.target.value)} className="fi" /></F>
+          <F label="Passout Year"><input type="number" value={form.passoutYear} onChange={(e) => set("passoutYear", e.target.value)} className="fi" placeholder="2027" /></F>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <F label="Owner"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
           <F label="Source"><select value={form.source} onChange={(e) => set("source", e.target.value)} className="fi"><option value="">None</option>{["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"].map((s) => <option key={s} value={s}>{s.replace("_"," ")}</option>)}</select></F>
           <F label="Track"><select value={form.track} onChange={(e) => set("track", e.target.value)} className="fi"><option value="">None</option><option value="1">Track 1</option><option value="2">Track 2</option><option value="3">Track 3</option></select></F>
@@ -315,10 +528,15 @@ function LeadForm({ users, contacts, onSubmit, onClose, loading }: any) {
   );
 }
 
-function LeadEditModal({ lead, users, contacts, onSubmit, onClose, loading }: any) {
+function LeadEditModal({ lead, users, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
     name: lead.name || "",
-    contactId: lead.contactId || "",
+    phone: lead.phone || "",
+    email: lead.email || "",
+    college: lead.college || "",
+    branch: lead.branch || "",
+    usn: lead.usn || "",
+    passoutYear: lead.passoutYear ? String(lead.passoutYear) : "",
     ownerId: lead.ownerId || "",
     source: lead.source || "",
     status: lead.status || "NEW",
@@ -335,8 +553,13 @@ function LeadEditModal({ lead, users, contacts, onSubmit, onClose, loading }: an
         e.preventDefault();
         onSubmit({
           name: form.name,
+          phone: form.phone,
+          email: form.email,
+          college: form.college,
+          branch: form.branch,
+          usn: form.usn,
+          passoutYear: form.passoutYear ? parseInt(form.passoutYear) : null,
           ownerId: form.ownerId || undefined,
-          contactId: form.contactId || undefined,
           source: form.source || undefined,
           status: form.status,
           priority: form.priority,
@@ -347,7 +570,14 @@ function LeadEditModal({ lead, users, contacts, onSubmit, onClose, loading }: an
       }} className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
         <F label="Lead Name" required><input value={form.name} onChange={(e) => set("name", e.target.value)} required className="fi" /></F>
         <div className="grid grid-cols-2 gap-3">
-          <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+          <F label="Phone"><input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className="fi" /></F>
+          <F label="Email"><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className="fi" /></F>
+          <F label="College"><input value={form.college} onChange={(e) => set("college", e.target.value)} className="fi" /></F>
+          <F label="Branch"><input value={form.branch} onChange={(e) => set("branch", e.target.value)} className="fi" /></F>
+          <F label="USN"><input value={form.usn} onChange={(e) => set("usn", e.target.value)} className="fi" /></F>
+          <F label="Passout Year"><input type="number" value={form.passoutYear} onChange={(e) => set("passoutYear", e.target.value)} className="fi" placeholder="2027" /></F>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <F label="Owner (Assigned To)"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
           <F label="Status"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></F>
           <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
@@ -553,7 +783,13 @@ function CSVImportModal({ users, onSubmit, onClose, loading }: any) {
       const obj: any = {};
       headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
       return {
-        name: obj.name || obj.lead_name || obj.company || "",
+        name: obj.name || obj.lead_name || "",
+        phone: obj.phone || undefined,
+        email: obj.email || undefined,
+        college: obj.college || undefined,
+        branch: obj.branch || undefined,
+        usn: obj.usn || undefined,
+        passoutYear: obj.passout_year || obj.year ? parseInt(obj.passout_year || obj.year) : undefined,
         status: obj.status || "NEW",
         priority: obj.priority || "MEDIUM",
         track: obj.track ? parseInt(obj.track) : undefined,
@@ -583,7 +819,7 @@ function CSVImportModal({ users, onSubmit, onClose, loading }: any) {
     <Modal title="Import Leads from CSV" onClose={onClose}>
       <div className="p-5 space-y-4">
         <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          CSV columns: <code>name</code> (required), <code>status</code>, <code>priority</code>, <code>track</code>, <code>estimated_value</code>, <code>source</code>
+          CSV columns: <code>name</code> (required), <code>phone</code>, <code>email</code>, <code>college</code>, <code>branch</code>, <code>usn</code>, <code>passout_year</code>, <code>status</code>, <code>priority</code>, <code>track</code>, <code>estimated_value</code>, <code>source</code>
         </p>
         <div
           className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer"
@@ -630,6 +866,105 @@ function CSVImportModal({ users, onSubmit, onClose, loading }: any) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+type Option = { value: string; label: string; color?: string; count?: number };
+
+function useDismiss(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open, close]);
+  return ref;
+}
+
+function FilterButton({ label, summary, active, open, onClick }: { label: string; summary?: string; active: boolean; open: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs"
+      style={{ borderColor: active ? "var(--primary)" : "var(--border)", background: active ? "var(--secondary)" : "var(--card)", color: active ? "var(--foreground)" : "var(--muted-foreground)" }}
+    >
+      <span>{label}{summary && <span className="font-medium">: {summary}</span>}</span>
+      <ChevronDown size={12} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
+    </button>
+  );
+}
+
+const panelStyle = { background: "var(--card)", borderColor: "var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" };
+
+function MultiSelect({ label, options, value, onChange, searchable }: { label: string; options: Option[]; value: string[]; onChange: (v: string[]) => void; searchable?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useDismiss(open, () => setOpen(false));
+  const shown = query ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase())) : options;
+  const summary = value.length === 1 ? options.find((o) => o.value === value[0])?.label : value.length > 1 ? String(value.length) : undefined;
+  const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+
+  return (
+    <div ref={ref} className="relative">
+      <FilterButton label={label} summary={summary} active={value.length > 0} open={open} onClick={() => setOpen((o) => !o)} />
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-30 w-60 rounded-md border py-1" style={panelStyle}>
+          {searchable && (
+            <div className="px-2 pb-1">
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Find ${label.toLowerCase()}…`}
+                className="w-full rounded border px-2 py-1 text-xs outline-none" style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--foreground)" }} />
+            </div>
+          )}
+          <div className="max-h-64 overflow-y-auto">
+            {shown.map((o) => {
+              const checked = value.includes(o.value);
+              return (
+                <button key={o.value} onClick={() => toggle(o.value)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-[var(--muted)]" style={{ color: "var(--foreground)" }}>
+                  <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border" style={{ borderColor: checked ? "var(--primary)" : "var(--border)", background: checked ? "var(--primary)" : "transparent", color: "var(--primary-foreground)" }}>
+                    {checked && <Check size={10} strokeWidth={3} />}
+                  </span>
+                  {o.color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.color }} />}
+                  <span className="flex-1 truncate">{o.label}</span>
+                  {o.count !== undefined && <span style={{ color: "var(--muted-foreground)" }}>{o.count}</span>}
+                </button>
+              );
+            })}
+            {shown.length === 0 && <p className="px-2.5 py-1.5 text-xs" style={{ color: "var(--muted-foreground)" }}>No matches</p>}
+          </div>
+          {value.length > 0 && (
+            <button onClick={() => onChange([])} className="mt-1 w-full border-t px-2.5 pt-1.5 pb-0.5 text-left text-xs hover:text-[var(--foreground)]" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+              Clear {label.toLowerCase()}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SingleSelect<T extends string>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T | ""; onChange: (v: T | "") => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const current = options.find((o) => o.value === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <FilterButton label={label} summary={current?.label} active={!!current} open={open} onClick={() => setOpen((o) => !o)} />
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-30 w-44 rounded-md border py-1" style={panelStyle}>
+          {[{ value: "" as const, label: "Any" }, ...options].map((o) => (
+            <button key={o.value || "any"} onClick={() => { onChange(o.value); setOpen(false); }}
+              className="flex w-full items-center justify-between px-2.5 py-1.5 text-xs text-left hover:bg-[var(--muted)]" style={{ color: "var(--foreground)" }}>
+              {o.label}
+              {o.value === value && <Check size={12} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
