@@ -3,15 +3,15 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const TEMP_PASSWORD = "hellcraft@123";
+const TEMP_PASSWORD = "gapso@123";
 
 const USERS = [
-  { name: "Gowrish H B",   email: "gowrish@hellcraft.in",    role: "ADMIN" },
-  { name: "Rakshak Rao",   email: "rakshak@hellcraft.in",    role: "EMPLOYEE" },
-  { name: "Vaishnavi S H", email: "vaishnavi@hellcraft.in",  role: "EMPLOYEE" },
-  { name: "Armaan Khan",   email: "armaan@hellcraft.in",     role: "EMPLOYEE" },
-  { name: "Abhishek",      email: "abhishek@hellcraft.in",   role: "EMPLOYEE" },
-  { name: "Mrityunjay",    email: "mrityunjay@hellcraft.in", role: "EMPLOYEE" },
+  { name: "Gowrish H B",   email: "gowrish@gapso.in",    role: "ADMIN" },
+  { name: "Rakshak Rao",   email: "rakshak@gapso.in",    role: "EMPLOYEE" },
+  { name: "Vaishnavi S H", email: "vaishnavi@gapso.in",  role: "EMPLOYEE" },
+  { name: "Armaan Khan",   email: "armaan@gapso.in",     role: "EMPLOYEE" },
+  { name: "Abhishek",      email: "abhishek@gapso.in",   role: "EMPLOYEE" },
+  { name: "Mrityunjay",    email: "mrityunjay@gapso.in", role: "EMPLOYEE" },
 ];
 
 async function main() {

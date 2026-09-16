@@ -17,13 +17,13 @@ firebase.initializeApp(config);
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const { title = "HellCraft CRM", body = "You have a new notification" } =
+  const { title = "GAPSO CRM", body = "You have a new notification" } =
     payload.notification ?? {};
 
   self.registration.showNotification(title, {
     body,
-    icon: "/hellcraft-logo.png",
-    badge: "/hellcraft-logo.png",
+    icon: "/gapso-logo.png",
+    badge: "/gapso-logo.png",
     data: payload.data ?? {},
     requireInteraction: true,
   });
