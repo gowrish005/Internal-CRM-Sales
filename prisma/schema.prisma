@@ -202,6 +202,12 @@ model Lead {
   tasks           Task[]
   notes           Note[]     @relation("LeadNotes")
   activities      Activity[]
+
+  // Speeds up the leads panel's filters and the divide feature's "unassigned,
+  // not archived" eligibility lookup.
+  @@index([isArchived, ownerId])
+  @@index([isArchived, status])
+  @@index([isArchived, createdAt])
 }
 
 model CalendarEvent {

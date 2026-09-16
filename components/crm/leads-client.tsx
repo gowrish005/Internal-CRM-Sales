@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore } from "react";
+import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check } from "lucide-react";
@@ -165,12 +165,33 @@ export function LeadsClient({ leads: initial, users }: Props) {
     return none ? [...opts, { value: NONE, label: "No year", count: none }] : opts;
   }, [leads]);
 
-  const displayed = useMemo(() => applySort(applyFilters(leads, filters), sort), [leads, filters, sort]);
+  // Search re-filters the whole list on every keystroke; deferring it lets React
+  // keep the input responsive and only redo the (more expensive) filter+sort pass
+  // once typing pauses, instead of blocking on every character.
+  const deferredSearch = useDeferredValue(filters.search);
+  const effectiveFilters = useMemo(() => ({ ...filters, search: deferredSearch }), [filters, deferredSearch]);
+  const displayed = useMemo(() => applySort(applyFilters(leads, effectiveFilters), sort), [leads, effectiveFilters, sort]);
   const activeFilterCount =
     (filters.search.trim() ? 1 : 0) + (filters.followUp ? 1 : 0) +
     [filters.statuses, filters.priorities, filters.owners, filters.tracks, filters.sources, filters.tags, filters.passoutYears].filter((a) => a.length).length;
   const set = <K extends keyof Filters>(key: K) => (value: Filters[K]) =>
     updatePrefs((p) => ({ ...p, filters: { ...p.filters, [key]: value } }));
+
+  // Leads eligible for the "Divide" action: whatever the panel's current
+  // filters show, restricted to leads nobody owns yet. This is what the
+  // Divide modal previews and what actually gets divided — dividing never
+  // touches a lead that's already assigned, and it never reaches outside
+  // the leads currently in view.
+  const unassignedInView = useMemo(() => displayed.filter((l) => !l.ownerId), [displayed]);
+
+  // Table pagination — keeps the DOM small when there are many leads instead
+  // of rendering every row at once.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  useEffect(() => { setPage(1); }, [effectiveFilters, sort]);
+  const pageCount = Math.max(1, Math.ceil(displayed.length / pageSize));
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
+  const paged = useMemo(() => displayed.slice((page - 1) * pageSize, page * pageSize), [displayed, page, pageSize]);
 
   function toggleSort(key: SortKey) {
     // asc -> desc -> off
@@ -226,10 +247,12 @@ export function LeadsClient({ leads: initial, users }: Props) {
   }
 
   async function handleDivide(userIds: string[]) {
+    const leadIds = unassignedInView.map((l) => l.id);
     startTransition(async () => {
       try {
-        const result = await divideLeads(userIds);
-        alert(`Done. ${result.assigned} leads divided — ~${result.perUser} per user.`);
+        const result = await divideLeads(leadIds, userIds);
+        const skippedNote = result.skipped ? ` (${result.skipped} were already assigned by someone else and were skipped.)` : "";
+        alert(`Done. ${result.assigned} unassigned leads divided — ~${result.perUser} per user.${skippedNote}`);
         router.refresh();
         setShowDivide(false);
       } catch (err: any) {
@@ -422,7 +445,7 @@ export function LeadsClient({ leads: initial, users }: Props) {
               <tbody style={{ background: "var(--card)" }}>
                 {displayed.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>{leads.length ? "No leads match these filters" : "No leads yet"}</td></tr>
-                ) : displayed.map((l) => (
+                ) : paged.map((l) => (
                   <tr key={l.id} className="border-b hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
                     <td className="px-4 py-2.5">
                       <div className="font-medium" style={{ color: "var(--foreground)" }}>{l.name}</div>
@@ -458,6 +481,42 @@ export function LeadsClient({ leads: initial, users }: Props) {
               </tbody>
             </table>
           </div>
+          {displayed.length > 0 && (
+            <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2.5 border-t" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                <span>
+                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, displayed.length)} of {displayed.length}
+                </span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="rounded border px-1.5 py-1 text-xs outline-none"
+                  style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--foreground)" }}
+                >
+                  {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-2.5 py-1 rounded-md text-xs border disabled:opacity-40"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "var(--card)" }}
+                >
+                  Prev
+                </button>
+                <span className="text-xs px-1.5" style={{ color: "var(--muted-foreground)" }}>Page {page} of {pageCount}</span>
+                <button
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  disabled={page >= pageCount}
+                  className="px-2.5 py-1 rounded-md text-xs border disabled:opacity-40"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)", background: "var(--card)" }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -470,7 +529,15 @@ export function LeadsClient({ leads: initial, users }: Props) {
       )}
 
       {showDivide && (
-        <DivideModal users={users} totalLeads={leads.length} onSubmit={handleDivide} onClose={() => setShowDivide(false)} loading={isPending} />
+        <DivideModal
+          users={users}
+          eligibleCount={unassignedInView.length}
+          filteredCount={displayed.length}
+          activeFilterCount={activeFilterCount}
+          onSubmit={handleDivide}
+          onClose={() => setShowDivide(false)}
+          loading={isPending}
+        />
       )}
 
       {showCSV && (
@@ -602,10 +669,11 @@ function getInitialsFD(name: string) {
   return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function DivideModal({ users, totalLeads, onSubmit, onClose, loading }: any) {
+function DivideModal({ users, eligibleCount, filteredCount, activeFilterCount, onSubmit, onClose, loading }: any) {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const perUser = selectedUsers.length > 0 ? Math.ceil(totalLeads / selectedUsers.length) : 0;
+  const perUser = selectedUsers.length > 0 ? Math.ceil(eligibleCount / selectedUsers.length) : 0;
+  const assignedInView = filteredCount - eligibleCount;
 
   const filtered = users.filter((u: any) =>
     u.name.toLowerCase().includes(search.toLowerCase())
@@ -634,11 +702,18 @@ function DivideModal({ users, totalLeads, onSubmit, onClose, loading }: any) {
           style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.12)" }}
         >
           <div className="flex-1">
-            <p className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>{totalLeads} leads</p>
+            <p className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>{eligibleCount} unassigned lead{eligibleCount === 1 ? "" : "s"}</p>
             <p className="text-xs mt-0.5" style={{ color: "rgba(34,197,94,0.55)" }}>
               {selectedUsers.length > 0
                 ? `~${perUser} per user across ${selectedUsers.length} selected`
                 : "Select users below to distribute"}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+              {activeFilterCount > 0
+                ? `Matches your current filters (${filteredCount} shown)${assignedInView > 0 ? ` — ${assignedInView} already assigned, skipped` : ""}.`
+                : assignedInView > 0
+                  ? `${assignedInView} of ${filteredCount} leads already have an owner and are skipped.`
+                  : "No filters active — all leads are in scope."}
             </p>
           </div>
           {selectedUsers.length > 0 && (
@@ -756,11 +831,11 @@ function DivideModal({ users, totalLeads, onSubmit, onClose, loading }: any) {
           </button>
           <button
             onClick={() => onSubmit(selectedUsers)}
-            disabled={loading || selectedUsers.length === 0}
+            disabled={loading || selectedUsers.length === 0 || eligibleCount === 0}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40"
             style={{ background: selectedUsers.length > 0 ? "#22c55e" : "rgba(34,197,94,0.2)", color: selectedUsers.length > 0 ? "#071209" : "#4ade80" }}
           >
-            {loading ? "Dividing…" : "Divide Leads"}
+            {loading ? "Dividing…" : eligibleCount === 0 ? "Nothing to divide" : "Divide Leads"}
           </button>
         </div>
       </div>
