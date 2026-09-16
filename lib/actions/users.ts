@@ -8,8 +8,8 @@ import { z } from "zod";
 
 const createUserSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().trim().toLowerCase().pipe(z.string().email()),
+  password: z.string().trim().min(6),
   role: z.enum(["ADMIN", "FOUNDER", "EMPLOYEE"]).default("EMPLOYEE"),
 });
 
@@ -81,6 +81,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   if (!session?.user) throw new Error("Unauthorized");
   const userId = (session.user as any).id as string;
 
+  newPassword = newPassword?.trim();
   if (!newPassword || newPassword.length < 6) throw new Error("New password must be at least 6 characters");
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { password: true } });

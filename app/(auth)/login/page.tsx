@@ -60,6 +60,10 @@ export default function LoginPage() {
               </label>
               <input
                 type="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

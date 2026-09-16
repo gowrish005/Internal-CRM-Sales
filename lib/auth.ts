@@ -4,8 +4,10 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
+// Emails are stored lowercase. Normalise what people type — phone keyboards
+// capitalise the first letter and copy-paste picks up stray spaces.
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().pipe(z.string().email()),
   password: z.string().min(6),
 });
 
@@ -31,7 +33,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user || !user.isActive) return null;
 
-        const valid = await bcrypt.compare(parsed.data.password, user.password);
+        // Try the password as typed first, then with surrounding whitespace
+        // removed (a pasted password often carries a trailing space).
+        const typed = parsed.data.password;
+        const valid =
+          (await bcrypt.compare(typed, user.password)) ||
+          (typed !== typed.trim() && (await bcrypt.compare(typed.trim(), user.password)));
         if (!valid) return null;
 
         return {
