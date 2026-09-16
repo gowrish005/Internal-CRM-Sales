@@ -30,8 +30,10 @@ export async function GET(req: NextRequest) {
         OR: [
           { name: { contains: q, mode: "insensitive" } },
           { owner: { name: { contains: q, mode: "insensitive" } } },
-          { contact: { firstName: { contains: q, mode: "insensitive" } } },
-          { contact: { lastName: { contains: q, mode: "insensitive" } } },
+          { phone: { contains: q } },
+          { email: { contains: q, mode: "insensitive" } },
+          { college: { contains: q, mode: "insensitive" } },
+          { usn: { contains: q, mode: "insensitive" } },
         ],
       },
       select: { id: true, name: true, status: true },

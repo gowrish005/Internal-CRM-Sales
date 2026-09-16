@@ -4,24 +4,10 @@ import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Plus, Search, Filter, MoreHorizontal, Eye, Trash2 } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ExternalLink } from "lucide-react";
 import { createContact, archiveContact } from "@/lib/actions/contacts";
-import { getInitials, cn } from "@/lib/utils";
+import { getInitials } from "@/lib/utils";
 import { ContactForm } from "@/components/forms/contact-form";
-
-const STATUS_LABELS: Record<string, string> = {
-  NEW: "New", CONTACTED: "Contacted", QUALIFIED: "Qualified",
-  PROPOSAL: "Proposal", NEGOTIATION: "Negotiation", WON: "Won", LOST: "Lost",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  NEW: "#6b7280", CONTACTED: "#3b82f6", QUALIFIED: "#10b981",
-  PROPOSAL: "#8b5cf6", NEGOTIATION: "#f59e0b", WON: "#059669", LOST: "#dc2626",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  LOW: "#6b7280", MEDIUM: "#f59e0b", HIGH: "#dc2626",
-};
 
 interface Props {
   initialContacts: any[];
@@ -43,7 +29,10 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
       c.firstName?.toLowerCase().includes(q) ||
       c.lastName?.toLowerCase().includes(q) ||
       c.email?.toLowerCase().includes(q) ||
-      c.designation?.toLowerCase().includes(q)
+      c.phone?.includes(q) ||
+      c.company?.toLowerCase().includes(q) ||
+      c.designation?.toLowerCase().includes(q) ||
+      c.location?.toLowerCase().includes(q)
     );
   });
 
@@ -71,7 +60,7 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>Contacts</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>B2B Contacts</h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>{total} total</p>
         </div>
         <button
@@ -90,7 +79,7 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search contacts..."
+            placeholder="Search name, company, role, phone…"
             className="w-full rounded-md border pl-8 pr-3 py-1.5 text-sm outline-none"
             style={{ borderColor: "var(--border)", background: "var(--background)", color: "var(--foreground)" }}
           />
@@ -116,7 +105,7 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "var(--muted)", borderBottom: `1px solid var(--border)` }}>
-                  {["Name", "Designation", "Email", "Phone", "Owner", "Status", "Last Contact", "Follow-up", ""].map((h) => (
+                  {["Name", "Company", "Phone", "Email", "LinkedIn", "Location", "Owner", "Last Contacted", "Follow-up", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{h}</th>
                   ))}
                 </tr>
@@ -136,26 +125,28 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
                         >
                           {getInitials(`${c.firstName} ${c.lastName}`)}
                         </div>
-                        <span className="font-medium" style={{ color: "var(--foreground)" }}>
-                          {c.firstName} {c.lastName}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium capitalize" style={{ color: "var(--foreground)" }}>{c.firstName} {c.lastName}</div>
+                          {c.designation && <div className="text-xs capitalize" style={{ color: "var(--muted-foreground)" }}>{c.designation}</div>}
+                        </div>
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.designation || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.email || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.phone || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.owner?.name || "—"}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{
-                          background: `${STATUS_COLORS[c.leadStatus]}15`,
-                          color: STATUS_COLORS[c.leadStatus],
-                        }}
-                      >
-                        {STATUS_LABELS[c.leadStatus]}
-                      </span>
+                    <td className="px-4 py-2.5 text-xs font-medium capitalize" style={{ color: "var(--foreground)" }}>{c.company || "—"}</td>
+                    <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: "var(--muted-foreground)" }}>
+                      {c.phone ? <a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a> : "—"}
                     </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      {c.email ? <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a> : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      {c.linkedin ? (
+                        <a href={/^https?:\/\//.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`} target="_blank" rel="noopener noreferrer" className="inline-flex p-1 rounded hover:bg-[var(--secondary)]" title={c.linkedin}>
+                          <ExternalLink size={14} />
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs capitalize" style={{ color: "var(--muted-foreground)" }}>{c.location || "—"}</td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.owner?.name || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
                       {c.lastContactedAt ? format(new Date(c.lastContactedAt), "MMM d") : "—"}
                     </td>

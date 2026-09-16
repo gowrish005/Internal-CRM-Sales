@@ -28,7 +28,6 @@ export async function getLeads({
   return prisma.lead.findMany({
     where,
     include: {
-      contact: { select: { id: true, firstName: true, lastName: true } },
       owner: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -109,8 +108,12 @@ export async function updateLead(id: string, data: unknown) {
   if (d.track !== undefined) updateData.track = d.track === null ? null : Number(d.track);
   if (d.estimatedValue !== undefined) updateData.estimatedValue = d.estimatedValue === null ? null : Number(d.estimatedValue);
   if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null;
+  for (const k of ["phone", "email", "college", "branch", "usn"] as const) {
+    if (d[k] !== undefined) updateData[k] = d[k]?.trim() || null;
+  }
+  if (d.passoutYear !== undefined) updateData.passoutYear = d.passoutYear ?? null;
+  if (d.tags !== undefined) updateData.tags = d.tags;
   // ObjectId fields — only set if non-empty string (prevents passing "" to Prisma)
-  if (d.contactId !== undefined) updateData.contactId = d.contactId || null;
   if (d.ownerId !== undefined) updateData.ownerId = d.ownerId || null;
   if (d.source !== undefined) updateData.source = d.source || null;
 
@@ -119,7 +122,6 @@ export async function updateLead(id: string, data: unknown) {
       where: { id },
       data: updateData,
       include: {
-        contact: { select: { id: true, firstName: true, lastName: true } },
         owner: { select: { id: true, name: true } },
       },
     });
@@ -139,33 +141,56 @@ export async function archiveLead(id: string) {
   revalidatePath("/crm/leads");
 }
 
-export async function divideLeads(userIds: string[]) {
+/**
+ * Round-robin assigns `leadIds` across `userIds`. `leadIds` is expected to be
+ * the set the UI showed the user (i.e. leads matching whatever filters were
+ * active in the leads panel) — but we still re-check eligibility here rather
+ * than trusting the client: only leads that are still unassigned and not
+ * archived get touched, so a divide never overwrites someone's existing
+ * assignment even if the client's view was stale.
+ */
+export async function divideLeads(leadIds: string[], userIds: string[]) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
   if (!userIds.length) throw new Error("No users selected");
+  if (!leadIds.length) throw new Error("No leads to divide");
 
-  const leads = await prisma.lead.findMany({
-    where: { isArchived: false },
+  const eligible = await prisma.lead.findMany({
+    where: { id: { in: leadIds }, isArchived: false, ownerId: null },
     select: { id: true },
     orderBy: { createdAt: "asc" },
   });
 
-  const updates = leads.map((lead, i) => ({
-    id: lead.id,
-    ownerId: userIds[i % userIds.length],
-  }));
+  if (!eligible.length) {
+    throw new Error("None of the matching leads are unassigned anymore — nothing to divide.");
+  }
 
-  await Promise.all(
-    updates.map(({ id, ownerId }) =>
-      prisma.lead.update({ where: { id }, data: { ownerId } })
+  // Group round-robin assignments by target owner so we issue one updateMany
+  // per user instead of one update per lead (O(users) db round trips, not O(leads)).
+  const buckets = new Map<string, string[]>();
+  eligible.forEach((lead, i) => {
+    const ownerId = userIds[i % userIds.length];
+    const bucket = buckets.get(ownerId);
+    if (bucket) bucket.push(lead.id);
+    else buckets.set(ownerId, [lead.id]);
+  });
+
+  const now = new Date();
+  await prisma.$transaction(
+    [...buckets.entries()].map(([ownerId, ids]) =>
+      prisma.lead.updateMany({ where: { id: { in: ids } }, data: { ownerId, lastActivityAt: now } })
     )
   );
 
   revalidatePath("/crm/leads");
-  return { assigned: leads.length, perUser: Math.ceil(leads.length / userIds.length) };
+  return {
+    assigned: eligible.length,
+    skipped: leadIds.length - eligible.length,
+    perUser: Math.ceil(eligible.length / userIds.length),
+  };
 }
 
-export async function importLeadsFromCSV(rows: { name: string; status?: string; priority?: string; track?: number; estimatedValue?: number; source?: string; ownerId?: string }[]) {
+export async function importLeadsFromCSV(rows: { name: string; phone?: string; email?: string; college?: string; branch?: string; usn?: string; passoutYear?: number; status?: string; priority?: string; track?: number; estimatedValue?: number; source?: string; ownerId?: string }[]) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
   if (!rows.length) throw new Error("No rows to import");
@@ -174,31 +199,35 @@ export async function importLeadsFromCSV(rows: { name: string; status?: string; 
   const VALID_PRIORITY = ["LOW","MEDIUM","HIGH"];
   const VALID_SOURCE = ["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"];
 
-  const created = await Promise.all(
-    rows.map((row) =>
-      prisma.lead.create({
-        data: {
-          name: row.name,
-          status: (VALID_STATUS.includes(row.status?.toUpperCase() ?? "") ? row.status!.toUpperCase() : "NEW") as any,
-          priority: (VALID_PRIORITY.includes(row.priority?.toUpperCase() ?? "") ? row.priority!.toUpperCase() : "MEDIUM") as any,
-          track: row.track && row.track >= 1 && row.track <= 3 ? row.track : undefined,
-          estimatedValue: row.estimatedValue ?? undefined,
-          source: (VALID_SOURCE.includes(row.source?.toUpperCase() ?? "") ? row.source!.toUpperCase() : undefined) as any,
-          ownerId: row.ownerId || undefined,
-          lastActivityAt: new Date(),
-        },
-      })
-    )
-  );
+  const now = new Date();
+  // Bulk insert in one round trip instead of N individual creates.
+  const { count } = await prisma.lead.createMany({
+    data: rows.map((row) => ({
+      name: row.name,
+      phone: row.phone || undefined,
+      email: row.email || undefined,
+      college: row.college || undefined,
+      branch: row.branch || undefined,
+      usn: row.usn || undefined,
+      passoutYear: row.passoutYear || undefined,
+      status: (VALID_STATUS.includes(row.status?.toUpperCase() ?? "") ? row.status!.toUpperCase() : "NEW") as any,
+      priority: (VALID_PRIORITY.includes(row.priority?.toUpperCase() ?? "") ? row.priority!.toUpperCase() : "MEDIUM") as any,
+      track: row.track && row.track >= 1 && row.track <= 3 ? row.track : undefined,
+      estimatedValue: row.estimatedValue ?? undefined,
+      source: (VALID_SOURCE.includes(row.source?.toUpperCase() ?? "") ? row.source!.toUpperCase() : undefined) as any,
+      ownerId: row.ownerId || undefined,
+      lastActivityAt: now,
+    })),
+  });
 
   await prisma.activity.create({
     data: {
       type: "LEAD_CREATED",
-      description: `Imported ${created.length} leads from CSV`,
+      description: `Imported ${count} leads from CSV`,
       userId: (session.user as any).id,
     },
   });
 
   revalidatePath("/crm/leads");
-  return { imported: created.length };
+  return { imported: count };
 }
