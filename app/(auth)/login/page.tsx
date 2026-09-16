@@ -45,7 +45,7 @@ export default function LoginPage() {
           >
             <Zap size={20} className="text-white" fill="white" />
           </div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>HellCraft CRM</h1>
+          <h1 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>GAPSO CRM</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>Sign in to your account</p>
         </div>
 
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="you@hellcraft.in"
+                placeholder="you@gapso.in"
                 className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{
                   borderColor: "#1e3322",

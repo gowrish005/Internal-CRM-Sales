@@ -40,7 +40,7 @@ export async function sendPushNotification({
         notification: {
           title,
           body,
-          icon: "/hellcraft-logo.png",
+          icon: "/gapso-logo.png",
           requireInteraction: true,
         },
         fcmOptions: { link: process.env.NEXT_PUBLIC_APP_URL ?? "/" },

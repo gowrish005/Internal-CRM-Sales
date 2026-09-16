@@ -84,11 +84,11 @@ export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProp
       >
         <div className="flex items-center justify-center w-8 h-8 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/hellcraft-logo.png" alt="HellCraft" width={32} height={32} style={{ objectFit: "contain" }} />
+          <img src="/gapso-logo.png" alt="GAPSO AI" width={32} height={32} style={{ objectFit: "contain" }} />
         </div>
         {!collapsed && (
           <span className="font-bold text-sm tracking-tight truncate flex-1" style={{ color: "#ebebeb", letterSpacing: "-0.01em" }}>
-            HellCraft Tech
+            GAPSO AI
           </span>
         )}
         {/* Mobile close button inside logo row */}

@@ -1,4 +1,4 @@
-# HellCraft CRM — Setup
+# GAPSO CRM — Setup
 
 ## Prerequisites
 - Node.js 18+
@@ -41,10 +41,10 @@
 
 | Role     | Email                   | Password     |
 |----------|-------------------------|--------------|
-| Admin    | it@hellcraft.in         | admin123     |
-| Founder  | arjun@hellcraft.in      | founder123   |
-| Founder  | priya@hellcraft.in      | founder123   |
-| Employee | rohan@hellcraft.in      | emp123       |
+| Admin    | it@gapso.in             | admin123     |
+| Founder  | arjun@gapso.in          | founder123   |
+| Founder  | priya@gapso.in          | founder123   |
+| Employee | rohan@gapso.in          | emp123       |
 
 ## Features
 - Dashboard with today's meetings, tasks, follow-ups

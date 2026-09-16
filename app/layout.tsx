@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HellCraft CRM",
+  title: "GAPSO CRM",
   description: "Internal CRM & Founders Calendar Platform",
 };
 

@@ -3,15 +3,21 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const TEMP_PASSWORD = "hellcraft@123";
+// Never hardcode this — the repo is public. Pass it at run time:
+//   SEED_PASSWORD='…' pnpm db:seed
+const TEMP_PASSWORD = process.env.SEED_PASSWORD ?? "";
+if (TEMP_PASSWORD.length < 12) {
+  console.error("Set SEED_PASSWORD (12+ characters) to the temporary password for these users.");
+  process.exit(1);
+}
 
 const USERS = [
-  { name: "Gowrish H B",   email: "gowrish@hellcraft.in",    role: "ADMIN" as const },
-  { name: "Rakshak Rao",   email: "rakshak@hellcraft.in",    role: "EMPLOYEE" as const },
-  { name: "Vaishnavi S H", email: "vaishnavi@hellcraft.in",  role: "EMPLOYEE" as const },
-  { name: "Armaan Khan",   email: "armaan@hellcraft.in",     role: "EMPLOYEE" as const },
-  { name: "Abhishek",      email: "abhishek@hellcraft.in",   role: "EMPLOYEE" as const },
-  { name: "Mrityunjay",    email: "mrityunjay@hellcraft.in", role: "EMPLOYEE" as const },
+  { name: "Gowrish H B",   email: "gowrish@gapso.in",    role: "ADMIN" as const },
+  { name: "Rakshak Rao",   email: "rakshak@gapso.in",    role: "EMPLOYEE" as const },
+  { name: "Vaishnavi S H", email: "vaishnavi@gapso.in",  role: "EMPLOYEE" as const },
+  { name: "Armaan Khan",   email: "armaan@gapso.in",     role: "EMPLOYEE" as const },
+  { name: "Abhishek",      email: "abhishek@gapso.in",   role: "EMPLOYEE" as const },
+  { name: "Mrityunjay",    email: "mrityunjay@gapso.in", role: "EMPLOYEE" as const },
 ];
 
 async function main() {
@@ -24,7 +30,7 @@ async function main() {
     });
     console.log(`  ${u.role.padEnd(8)} ${u.name} <${u.email}>`);
   }
-  console.log(`\nSeed done. Temp password for new users: ${TEMP_PASSWORD}`);
+  console.log(`\nSeed done. New users got the SEED_PASSWORD temp password`);
 }
 
 main()
