@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check } from "lucide-react";
+import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { createLead, updateLeadStatus, updateLead, archiveLead, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
 import { formatCurrency } from "@/lib/utils";
 
@@ -188,6 +188,30 @@ export function LeadsClient({ leads: initial, users }: Props) {
   // touches a lead that's already assigned, and it never reaches outside
   // the leads currently in view.
   const unassignedInView = useMemo(() => displayed.filter((l) => !l.ownerId), [displayed]);
+
+  // Lead detail modal: which lead in `displayed` is open, so ←/→ can step
+  // to its neighbor regardless of which page it's on.
+  const editingIndex = editingLead ? displayed.findIndex((l) => l.id === editingLead.id) : -1;
+  function goToAdjacentLead(dir: 1 | -1) {
+    if (editingIndex === -1) return;
+    const next = displayed[editingIndex + dir];
+    if (next) setEditingLead(next);
+  }
+
+  // Quick status change (↑/↓ in the lead modal) — applies immediately, same
+  // as dragging a card between kanban columns, rather than waiting for Save.
+  async function handleQuickStatus(id: string, status: Status) {
+    setLeads((prev) => prev.map((l) => l.id === id ? { ...l, status } : l));
+    setEditingLead((prev: any) => prev && prev.id === id ? { ...prev, status } : prev);
+    startTransition(async () => {
+      try {
+        await updateLeadStatus(id, status);
+      } catch (err: any) {
+        setLeads(initial);
+        alert("Error: " + err.message);
+      }
+    });
+  }
 
   // Table pagination — keeps the DOM small when there are many leads instead
   // of rendering every row at once.
@@ -392,13 +416,14 @@ export function LeadsClient({ leads: initial, users }: Props) {
                     draggable
                     onDragStart={() => setDragging(lead.id)}
                     onDragEnd={() => { setDragging(null); setDragOver(null); }}
+                    onClick={() => setEditingLead(lead)}
                     className="rounded-md border p-3 cursor-grab active:cursor-grabbing"
                     style={{ background: "var(--card)", borderColor: "var(--border)", opacity: dragging === lead.id ? 0.5 : 1 }}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <p className="text-sm font-medium mb-1 flex-1" style={{ color: "var(--foreground)" }}>{lead.name}</p>
                       <button
-                        onClick={() => setEditingLead(lead)}
+                        onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }}
                         className="shrink-0 p-0.5 rounded hover:bg-[var(--secondary)]"
                         style={{ color: "var(--muted-foreground)" }}
                         title="Edit"
@@ -451,13 +476,13 @@ export function LeadsClient({ leads: initial, users }: Props) {
                 {displayed.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>{leads.length ? "No leads match these filters" : "No leads yet"}</td></tr>
                 ) : paged.map((l) => (
-                  <tr key={l.id} className="border-b hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
+                  <tr key={l.id} onClick={() => setEditingLead(l)} className="border-b cursor-pointer hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
                     <td className="px-4 py-2.5">
                       <div className="font-medium" style={{ color: "var(--foreground)" }}>{l.name}</div>
                       {l.usn && <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>{l.usn}</div>}
                     </td>
                     <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: "var(--muted-foreground)" }}>
-                      {l.phone ? <a href={`tel:${l.phone}`} className="hover:underline" style={{ color: "var(--foreground)" }}>{l.phone}</a> : "—"}
+                      {l.phone ? <a href={`tel:${l.phone}`} onClick={(e) => e.stopPropagation()} className="hover:underline" style={{ color: "var(--foreground)" }}>{l.phone}</a> : "—"}
                       {l.email && <div className="opacity-75">{l.email}</div>}
                     </td>
                     <td className="px-4 py-2.5 text-xs max-w-[260px]" style={{ color: "var(--muted-foreground)" }}>
@@ -477,7 +502,7 @@ export function LeadsClient({ leads: initial, users }: Props) {
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--foreground)" }}>{l.estimatedValue ? formatCurrency(l.estimatedValue) : "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleDateString() : "—"}</td>
                     <td className="px-4 py-2.5">
-                      <button onClick={() => setEditingLead(l)} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
+                      <button onClick={(e) => { e.stopPropagation(); setEditingLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
                         <Edit2 size={13} />
                       </button>
                     </td>
@@ -530,7 +555,19 @@ export function LeadsClient({ leads: initial, users }: Props) {
       )}
 
       {editingLead && (
-        <LeadEditModal lead={editingLead} users={users} onSubmit={(data: any) => handleUpdate(editingLead.id, data)} onClose={() => setEditingLead(null)} loading={isPending} />
+        <LeadEditModal
+          key={editingLead.id}
+          lead={editingLead}
+          users={users}
+          onSubmit={(data: any) => handleUpdate(editingLead.id, data)}
+          onClose={() => setEditingLead(null)}
+          loading={isPending}
+          onNavigate={goToAdjacentLead}
+          hasPrev={editingIndex > 0}
+          hasNext={editingIndex !== -1 && editingIndex < displayed.length - 1}
+          position={editingIndex !== -1 ? `${editingIndex + 1} of ${displayed.length}` : undefined}
+          onQuickStatus={handleQuickStatus}
+        />
       )}
 
       {showDivide && (
@@ -600,7 +637,7 @@ function LeadForm({ users, onSubmit, onClose, loading }: any) {
   );
 }
 
-function LeadEditModal({ lead, users, onSubmit, onClose, loading }: any) {
+function LeadEditModal({ lead, users, onSubmit, onClose, loading, onNavigate, hasPrev, hasNext, position, onQuickStatus }: any) {
   const [form, setForm] = useState({
     name: lead.name || "",
     phone: lead.phone || "",
@@ -619,8 +656,60 @@ function LeadEditModal({ lead, users, onSubmit, onClose, loading }: any) {
   });
   const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
 
+  // Keyboard shortcuts while this lead's popup is open: ←/→ step to the
+  // previous/next lead (from the panel's current view), ↑/↓ cycle its status
+  // immediately (same as dragging a kanban card). Skipped while a form field
+  // has focus so typing and native <select> arrow-key behavior aren't hijacked.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "ArrowRight" && onNavigate) { e.preventDefault(); onNavigate(1); }
+      else if (e.key === "ArrowLeft" && onNavigate) { e.preventDefault(); onNavigate(-1); }
+      else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const dir = e.key === "ArrowUp" ? -1 : 1;
+        const idx = STATUSES.indexOf(form.status as Status);
+        const nextIdx = Math.min(STATUSES.length - 1, Math.max(0, idx + dir));
+        const nextStatus = STATUSES[nextIdx];
+        if (nextStatus !== form.status) {
+          set("status", nextStatus);
+          onQuickStatus?.(lead.id, nextStatus);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [form.status, lead.id, onNavigate, onQuickStatus]);
+
+  const navButtons = (onNavigate || position) && (
+    <div className="flex items-center gap-0.5 mr-1">
+      <button
+        type="button"
+        onClick={() => onNavigate?.(-1)}
+        disabled={!hasPrev}
+        title="Previous lead (←)"
+        className="flex items-center justify-center w-6 h-6 rounded-md disabled:opacity-30"
+        style={{ color: "var(--muted-foreground)", background: "rgba(255,255,255,0.05)" }}
+      >
+        <ChevronLeft size={14} />
+      </button>
+      {position && <span className="text-xs px-1" style={{ color: "rgba(255,255,255,0.35)" }}>{position}</span>}
+      <button
+        type="button"
+        onClick={() => onNavigate?.(1)}
+        disabled={!hasNext}
+        title="Next lead (→)"
+        className="flex items-center justify-center w-6 h-6 rounded-md disabled:opacity-30"
+        style={{ color: "var(--muted-foreground)", background: "rgba(255,255,255,0.05)" }}
+      >
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+
   return (
-    <Modal title="Edit Lead" onClose={onClose}>
+    <Modal title="Edit Lead" onClose={onClose} headerRight={navButtons}>
       <form onSubmit={(e) => {
         e.preventDefault();
         onSubmit({
@@ -651,7 +740,7 @@ function LeadEditModal({ lead, users, onSubmit, onClose, loading }: any) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <F label="Owner (Assigned To)"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
-          <F label="Status"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></F>
+          <F label="Status (↑↓)"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></F>
           <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
           <F label="Track"><select value={form.track} onChange={(e) => set("track", e.target.value)} className="fi"><option value="">None</option><option value="1">Track 1</option><option value="2">Track 2</option><option value="3">Track 3</option></select></F>
           <F label="Est. Value (₹)"><input type="number" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)} className="fi" placeholder="0" /></F>
@@ -1048,7 +1137,7 @@ function SingleSelect<T extends string>({ label, options, value, onChange }: { l
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, headerRight }: { title: string; onClose: () => void; children: React.ReactNode; headerRight?: React.ReactNode }) {
   // Portal to document.body so fixed positioning isn't confined by parent stacking contexts
   // (PageTransition uses will-change: transform which creates a new containing block)
   if (typeof document === "undefined") return null;
@@ -1065,6 +1154,8 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
       >
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "#1e3322" }}>
           <h2 className="text-sm font-semibold" style={{ color: "#e8e8e8" }}>{title}</h2>
+          <div className="flex items-center gap-2">
+          {headerRight}
           <button
             onClick={onClose}
             className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors"
@@ -1074,6 +1165,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
           >
             ×
           </button>
+          </div>
         </div>
         {children}
       </div>
