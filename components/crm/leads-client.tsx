@@ -141,6 +141,11 @@ interface Props {
 
 export function LeadsClient({ leads: initial, users }: Props) {
   const [leads, setLeads] = useState(initial);
+  // useState only reads `initial` on mount — router.refresh() re-runs the server
+  // component and gives us a new `initial` array, but without this effect that
+  // fresh data never reaches state, so actions that rely on refresh (create,
+  // divide, CSV import) look like nothing happened until a manual page reload.
+  useEffect(() => { setLeads(initial); }, [initial]);
   const [{ view, filters, sort }, updatePrefs] = useLeadPrefs();
   const setView = (v: Prefs["view"]) => updatePrefs((p) => ({ ...p, view: v }));
   const [showForm, setShowForm] = useState(false);
