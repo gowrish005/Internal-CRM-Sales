@@ -171,9 +171,11 @@ export async function importLeadsFromCSV(rows: { name: string; phone?: string; e
   const user = await requireManager();
   if (!rows.length) throw new Error("No rows to import");
 
-  // CSV "NO REPLY" / "no-reply" -> NO_REPLY
+  // CSV "NO REPLY" / "no-reply" -> NO_REPLY. Legacy "CONTACTED" (removed
+  // status) -> NO_REPLY, matching scripts/migrate-contacted-to-no-reply.mjs.
   const toStatus = (s?: string) => {
-    const v = s?.trim().toUpperCase().replace(/[\s-]+/g, "_");
+    const raw = s?.trim().toUpperCase().replace(/[\s-]+/g, "_");
+    const v = raw === "CONTACTED" ? "NO_REPLY" : raw;
     return isLeadStatus(v) ? v : "NEW";
   };
   const VALID_PRIORITY = ["LOW","MEDIUM","HIGH"];

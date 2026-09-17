@@ -16,7 +16,6 @@ enum Role {
 // Student-calling pipeline for Leads. Mirrored in lib/lead-status.ts.
 enum LeadStatus {
   NEW // not called yet
-  CONTACTED // reached, decision pending
   HOT // interested
   CALLBACK // asked to be called back
   NO_REPLY // tried, not reached
