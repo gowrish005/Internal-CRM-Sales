@@ -2,10 +2,13 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, isLeadStatus } from "@/lib/lead-status";
+
+type FollowUpLead = Awaited<ReturnType<typeof getDashboardData>>["leadsNeedingFollowUp"][number];
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
-  const { isManager, stats, todayMeetings, upcomingMeetings, tasksDueToday, recentActivity } = data;
+  const { isManager, stats, todayMeetings, upcomingMeetings, tasksDueToday, recentActivity, leadsNeedingFollowUp } = data;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -24,6 +27,9 @@ export default async function DashboardPage() {
           <StatCard label="My Open Tasks" value={stats.openTasks} href="/tasks" />
         )}
         <StatCard label={isManager ? "Active Leads" : "My Active Leads"} value={stats.activeLeads} href="/crm/leads" />
+        {isManager && (
+          <StatCard label="Unassigned Leads" value={stats.unassignedLeads} href="/crm/leads" />
+        )}
         <StatCard label="Meetings Today" value={stats.meetingsToday} href="/calendar" />
         <StatCard
           label={isManager ? "Pending Follow-ups" : "Lead Follow-ups Due"}
@@ -67,17 +73,29 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Recent activity */}
+        {/* Recent activity (managers) / follow-ups due (employees) */}
         <div>
-          <Section title="Recent Activity" href={isManager ? "/activity" : undefined}>
-            {recentActivity.length === 0 ? (
-              <Empty text="No recent activity" />
-            ) : (
-              recentActivity.slice(0, 8).map((a: any) => (
-                <ActivityRow key={a.id} activity={a} />
-              ))
-            )}
-          </Section>
+          {isManager ? (
+            <Section title="Recent Activity" href="/activity">
+              {recentActivity.length === 0 ? (
+                <Empty text="No recent activity" />
+              ) : (
+                recentActivity.slice(0, 8).map((a: any) => (
+                  <ActivityRow key={a.id} activity={a} />
+                ))
+              )}
+            </Section>
+          ) : (
+            <Section title="Leads Needing Follow-up" href="/crm/leads" count={leadsNeedingFollowUp.length}>
+              {leadsNeedingFollowUp.length === 0 ? (
+                <Empty text="No follow-ups due" />
+              ) : (
+                leadsNeedingFollowUp.map((l) => (
+                  <LeadFollowUpRow key={l.id} lead={l} />
+                ))
+              )}
+            </Section>
+          )}
         </div>
       </div>
     </div>
@@ -162,6 +180,22 @@ function TaskRow({ task }: { task: any }) {
       <p className="text-sm flex-1 truncate" style={{ color: "var(--foreground)" }}>{task.title}</p>
       <span className="text-xs shrink-0" style={{ color: "var(--muted-foreground)" }}>{task.owner?.name}</span>
     </div>
+  );
+}
+
+function LeadFollowUpRow({ lead }: { lead: FollowUpLead }) {
+  const overdue = lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
+  return (
+    <Link href={`/crm/leads/${lead.id}`} className="px-4 py-2.5 flex items-center gap-3 hover:opacity-80 transition-opacity">
+      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isLeadStatus(lead.status) ? LEAD_STATUS_COLORS[lead.status] : undefined }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm truncate" style={{ color: "var(--foreground)" }}>{lead.name}</p>
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{isLeadStatus(lead.status) ? LEAD_STATUS_LABELS[lead.status] : lead.status}</p>
+      </div>
+      <span className="text-xs shrink-0" style={{ color: overdue ? "#dc2626" : "var(--muted-foreground)" }}>
+        {lead.nextFollowUpAt ? format(new Date(lead.nextFollowUpAt), "MMM d") : "—"}
+      </span>
+    </Link>
   );
 }
 
