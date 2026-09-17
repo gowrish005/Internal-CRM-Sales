@@ -1,6 +1,10 @@
 // One-off: convert Lead.status from the old B2B pipeline
 // (NEW CONTACTED QUALIFIED PROPOSAL NEGOTIATION WON LOST) to the calling
-// pipeline (NEW CONTACTED HOT CALLBACK NO_REPLY WON LOST).
+// pipeline (NEW HOT CALLBACK NO_REPLY WON LOST).
+//
+// HISTORICAL: already run in production. The CONTACTED status it originally
+// kept was later removed (see scripts/migrate-contacted-to-no-reply.mjs), so
+// the mapping below now sends CONTACTED to NO_REPLY instead. Do not re-run.
 //
 // Uses the MongoDB driver directly: once the schema changes, Prisma can no
 // longer read the old enum values. Idempotent — leads already on a new value
@@ -12,7 +16,7 @@ import { MongoClient } from "mongodb";
 process.loadEnvFile(".env");
 const APPLY = process.env.APPLY === "1";
 const OLD = new Set(["QUALIFIED", "PROPOSAL", "NEGOTIATION"]);
-const NEW = new Set(["NEW", "CONTACTED", "HOT", "CALLBACK", "NO_REPLY", "WON", "LOST"]);
+const NEW = new Set(["NEW", "HOT", "CALLBACK", "NO_REPLY", "WON", "LOST"]);
 
 const NO_REPLY_RE = /pick|respond|switch|incoming|incming|no answer|not reachable/;
 const CALLBACK_RE = /call ?back|call later|tomorrow/;
@@ -28,9 +32,9 @@ function mapStatus(status, callNote) {
       if (CALLBACK_RE.test(note)) return "CALLBACK";
       return "NEW";
     case "CONTACTED":
-      // Moved to CONTACTED in the app after a "no reply" note: the app edit wins.
+      // CONTACTED no longer exists in the pipeline: callback notes win, else NO_REPLY.
       if (CALLBACK_RE.test(note)) return "CALLBACK";
-      return "CONTACTED";
+      return "NO_REPLY";
   }
   return null;
 }
@@ -49,7 +53,7 @@ for (const n of notes) {
 const plan = new Map(); // "FROM -> TO | note" -> ids
 const unknown = [];
 for (const l of leads) {
-  if (NEW.has(l.status) && !OLD.has(l.status) && !["NEW", "CONTACTED"].includes(l.status)) continue; // already migrated
+  if (NEW.has(l.status) && !OLD.has(l.status) && l.status !== "NEW") continue; // already migrated
   const to = mapStatus(l.status, latestCall.get(String(l._id)));
   if (!to) { unknown.push(`${l.name}: ${l.status}`); continue; }
   const key = `${l.status.padEnd(11)} -> ${to.padEnd(9)} | ${(latestCall.get(String(l._id)) || "(no call note)").toLowerCase()}`;
