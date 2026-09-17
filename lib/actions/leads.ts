@@ -6,6 +6,7 @@ import { applyLeadUpdate } from "@/lib/lead-service";
 import { createLeadSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { isLeadStatus } from "@/lib/lead-status";
+import { parseISTDateOnly } from "@/lib/date";
 
 export async function getLeads({
   search,
@@ -82,8 +83,8 @@ export async function createLead(data: unknown) {
     data: {
       ...rest,
       estimatedValue: estimatedValue ?? undefined,
-      expectedCloseAt: expectedCloseAt ? new Date(expectedCloseAt) : undefined,
-      nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt) : undefined,
+      expectedCloseAt: expectedCloseAt ? parseISTDateOnly(expectedCloseAt) : undefined,
+      nextFollowUpAt: nextFollowUpAt ? parseISTDateOnly(nextFollowUpAt) : undefined,
       lastActivityAt: new Date(),
     },
   });

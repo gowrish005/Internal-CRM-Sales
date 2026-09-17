@@ -9,6 +9,7 @@ import { saveLeadOrder } from "@/lib/lead-order";
 import { useToast } from "@/components/crm/toast-provider";
 import { formatCurrency } from "@/lib/utils";
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
+import { formatIST, startOfDayIST, addDaysIST } from "@/lib/date";
 
 const STATUSES = LEAD_STATUSES;
 type Status = LeadStatus;
@@ -95,11 +96,11 @@ function matchesFollowUp(l: any, f: FollowUp) {
   if (!l.nextFollowUpAt) return false;
   if (f === "set") return true;
   const at = new Date(l.nextFollowUpAt);
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(startOfToday); endOfToday.setDate(endOfToday.getDate() + 1);
+  const startOfToday = startOfDayIST();
+  const endOfToday = addDaysIST(startOfToday, 1);
   if (f === "overdue") return at < startOfToday;
   if (f === "today") return at >= startOfToday && at < endOfToday;
-  const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + 7);
+  const endOfWeek = addDaysIST(startOfToday, 7);
   return at >= startOfToday && at < endOfWeek; // "week" = next 7 days
 }
 
@@ -481,7 +482,7 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                     </td>
                     <td className="px-4 py-2.5 text-xs font-medium" style={{ color: PRIORITY_COLORS[l.priority] }}>{l.priority}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--foreground)" }}>{l.estimatedValue ? formatCurrency(l.estimatedValue) : "—"}</td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleDateString() : "—"}</td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.nextFollowUpAt ? formatIST(l.nextFollowUpAt, "monthDayYear") : "—"}</td>
                     <td className="px-4 py-2.5">
                       <button onClick={(e) => { e.stopPropagation(); openLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
                         <Edit2 size={13} />

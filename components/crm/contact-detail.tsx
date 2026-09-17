@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { formatIST } from "@/lib/date";
 import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Edit, Plus, Calendar, CheckSquare } from "lucide-react";
 import Link from "next/link";
 import { updateContact, addContactNote } from "@/lib/actions/contacts";
@@ -122,9 +122,9 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
               </Row>
               <Row label="Priority" value={contact.priority} />
               <Row label="Source" value={contact.leadSource?.replace("_", " ")} />
-              <Row label="Next Follow-up" value={contact.nextFollowUpAt ? format(new Date(contact.nextFollowUpAt), "MMM d, yyyy") : undefined} />
-              <Row label="Last Contacted" value={contact.lastContactedAt ? format(new Date(contact.lastContactedAt), "MMM d, yyyy") : undefined} />
-              <Row label="Created" value={format(new Date(contact.createdAt), "MMM d, yyyy")} />
+              <Row label="Next Follow-up" value={contact.nextFollowUpAt ? formatIST(contact.nextFollowUpAt, "monthDayYear") : undefined} />
+              <Row label="Last Contacted" value={contact.lastContactedAt ? formatIST(contact.lastContactedAt, "monthDayYear") : undefined} />
+              <Row label="Created" value={formatIST(contact.createdAt, "monthDayYear")} />
             </dl>
           </div>
         </div>
@@ -182,7 +182,7 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
                     <div key={a.id} className="px-4 py-3">
                       <p className="text-sm" style={{ color: "var(--foreground)" }}>{a.description}</p>
                       <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                        {a.user?.name} · {format(new Date(a.createdAt), "MMM d, HH:mm")}
+                        {a.user?.name} · {formatIST(a.createdAt, "monthDayTime")}
                       </p>
                     </div>
                   ))
@@ -197,7 +197,7 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
                     <div key={n.id} className="px-4 py-3">
                       <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--foreground)" }}>{n.content}</p>
                       <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
-                        {n.author?.name} · {format(new Date(n.createdAt), "MMM d, yyyy")}
+                        {n.author?.name} · {formatIST(n.createdAt, "monthDayYear")}
                       </p>
                     </div>
                   ))
@@ -215,7 +215,7 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
                         <p className="text-sm" style={{ color: "var(--foreground)", textDecoration: t.status === "COMPLETED" ? "line-through" : "none" }}>
                           {t.title}
                         </p>
-                        {t.dueAt && <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{format(new Date(t.dueAt), "MMM d")}</p>}
+                        {t.dueAt && <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{formatIST(t.dueAt, "monthDay")}</p>}
                       </div>
                     </div>
                   ))

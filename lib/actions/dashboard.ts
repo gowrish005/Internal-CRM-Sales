@@ -2,14 +2,14 @@
 
 import { prisma } from "@/lib/db";
 import { requireUser, isManager, leadScope, taskScope, eventScope } from "@/lib/dal";
+import { startOfDayIST, addDaysIST } from "@/lib/date";
 
 export async function getDashboardData() {
   const user = await requireUser();
   const manager = isManager(user);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today.getTime() + 86400000);
-  const weekEnd = new Date(today.getTime() + 7 * 86400000);
+  const today = startOfDayIST();
+  const tomorrow = addDaysIST(today, 1);
+  const weekEnd = addDaysIST(today, 7);
 
   const eventUserFilter = eventScope(user);
 

@@ -3,7 +3,7 @@
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatIST, isPastIST } from "@/lib/date";
 import { Plus, Search, Eye, Trash2, ExternalLink } from "lucide-react";
 import { createContact, archiveContact } from "@/lib/actions/contacts";
 import { getInitials } from "@/lib/utils";
@@ -148,10 +148,10 @@ export function ContactsClient({ initialContacts, users, total }: Props) {
                     <td className="px-4 py-2.5 text-xs capitalize" style={{ color: "var(--muted-foreground)" }}>{c.location || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{c.owner?.name || "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                      {c.lastContactedAt ? format(new Date(c.lastContactedAt), "MMM d") : "—"}
+                      {c.lastContactedAt ? formatIST(c.lastContactedAt, "monthDay") : "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: c.nextFollowUpAt && new Date(c.nextFollowUpAt) < new Date() ? "#dc2626" : "var(--muted-foreground)" }}>
-                      {c.nextFollowUpAt ? format(new Date(c.nextFollowUpAt), "MMM d") : "—"}
+                    <td className="px-4 py-2.5 text-xs" style={{ color: c.nextFollowUpAt && isPastIST(c.nextFollowUpAt) ? "#dc2626" : "var(--muted-foreground)" }}>
+                      {c.nextFollowUpAt ? formatIST(c.nextFollowUpAt, "monthDay") : "—"}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1">

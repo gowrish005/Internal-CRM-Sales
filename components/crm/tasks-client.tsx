@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { format, isPast, isToday } from "date-fns";
 import { Plus, CheckCircle, Circle, X } from "lucide-react";
 import { createTask, updateTask, archiveTask } from "@/lib/actions/tasks";
+import { formatIST, startOfDayIST, addDaysIST, isPastIST, istDateString } from "@/lib/date";
 
 const VIEWS = [
   { key: "all", label: "All" },
@@ -36,9 +36,8 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today.getTime() + 86400000);
+  const today = startOfDayIST();
+  const tomorrow = addDaysIST(today, 1);
 
   function filterTasks(t: any) {
     if (activeView === "today") return t.dueAt && new Date(t.dueAt) >= today && new Date(t.dueAt) < tomorrow && t.status !== "COMPLETED";
@@ -151,7 +150,7 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
             {filtered.map((task) => {
-              const overdue = task.dueAt && isPast(new Date(task.dueAt)) && task.status !== "COMPLETED";
+              const overdue = task.dueAt && isPastIST(task.dueAt) && task.status !== "COMPLETED";
               return (
                 <div key={task.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--muted)]">
                   <button
@@ -175,7 +174,7 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       {task.dueAt && (
                         <span className="text-xs" style={{ color: overdue ? "#dc2626" : "var(--muted-foreground)" }}>
-                          {overdue ? "Overdue · " : ""}{format(new Date(task.dueAt), "MMM d")}
+                          {overdue ? "Overdue · " : ""}{formatIST(task.dueAt, "monthDay")}
                         </span>
                       )}
                       <span className="text-xs font-medium" style={{ color: PRIORITY_COLORS[task.priority] }}>{task.priority}</span>
@@ -210,10 +209,7 @@ function TaskForm({ users, contacts, leads, canManage, onSubmit, onClose, loadin
   });
   const [ownerIds, setOwnerIds] = useState<string[]>([]);
   const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+  const todayStr = istDateString();
   const toggleOwner = (id: string) =>
     setOwnerIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 

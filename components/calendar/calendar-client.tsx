@@ -5,13 +5,17 @@ import { useRouter } from "next/navigation";
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   addDays, addWeeks, addMonths, subWeeks, subMonths,
-  isSameDay, isSameMonth, isToday, eachDayOfInterval, startOfDay, endOfDay, parseISO,
+  eachDayOfInterval,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { createEvent, cancelEvent } from "@/lib/actions/events";
+import {
+  formatIST, istDateString, isTodayIST, istMinutesOfDay, istDateTimeAt,
+  istHourMinute, startOfDayIST,
+} from "@/lib/date";
 
 type View = "week" | "month" | "day" | "agenda";
 
@@ -95,10 +99,10 @@ export function CalendarClient({ events: initialEvents, users, contacts, current
           </button>
           <h2 className="text-base font-semibold" style={{ color: "var(--foreground)" }}>
             {view === "week"
-              ? `${format(startOfWeek(current, { weekStartsOn: 1 }), "MMM d")} – ${format(endOfWeek(current, { weekStartsOn: 1 }), "MMM d, yyyy")}`
+              ? `${formatIST(startOfWeek(current, { weekStartsOn: 1 }), "monthDay")} – ${formatIST(endOfWeek(current, { weekStartsOn: 1 }), "monthDayYear")}`
               : view === "month"
-              ? format(current, "MMMM yyyy")
-              : format(current, "MMMM d, yyyy")}
+              ? formatIST(current, "monthYear")
+              : formatIST(current, "fullMonthDayYear")}
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -168,7 +172,7 @@ function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: an
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   function eventsForDay(day: Date) {
-    return events.filter((e: any) => isSameDay(new Date(e.startAt), day));
+    return events.filter((e: any) => istDateString(e.startAt) === istDateString(day));
   }
 
   return (
@@ -183,12 +187,12 @@ function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: an
             style={{ borderColor: "var(--border)" }}
             onClick={() => onDayClick(day)}
           >
-            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{format(day, "EEE")}</p>
+            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{formatIST(day, "shortWeekday")}</p>
             <p
               className="text-sm font-medium"
-              style={{ color: isToday(day) ? "var(--primary)" : "var(--foreground)" }}
+              style={{ color: isTodayIST(day) ? "var(--primary)" : "var(--foreground)" }}
             >
-              {format(day, "d")}
+              {formatIST(day, "day")}
             </p>
           </div>
         ))}
@@ -202,14 +206,12 @@ function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: an
                 <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{h === 0 ? "" : `${h}:00`}</span>
               </div>
               {days.map((day) => {
-                const cellDate = new Date(day);
-                cellDate.setHours(h, 0, 0, 0);
                 return (
                   <div
                     key={day.toISOString()}
                     className="flex-1 border-r cursor-pointer transition-colors"
                     style={{ borderColor: "var(--border)" }}
-                    onClick={() => onCellClick(cellDate)}
+                    onClick={() => onCellClick(istDateTimeAt(day, h))}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   />
@@ -220,8 +222,8 @@ function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: an
           {/* Events overlay */}
           {days.map((day, di) => (
             eventsForDay(day).map((ev: any) => {
-              const startMin = new Date(ev.startAt).getHours() * 60 + new Date(ev.startAt).getMinutes();
-              const endMin = new Date(ev.endAt).getHours() * 60 + new Date(ev.endAt).getMinutes();
+              const startMin = istMinutesOfDay(ev.startAt);
+              const endMin = istMinutesOfDay(ev.endAt);
               const top = startMin + (48 / 7) * 0; // rough positioning
               const height = Math.max(endMin - startMin, 20);
               const color = EVENT_COLORS[ev.type] || "#6b7280";
@@ -241,7 +243,7 @@ function WeekView({ current, events, onEventClick, onDayClick, onCellClick }: an
                   }}
                 >
                   <p className="text-xs font-medium truncate">{ev.title}</p>
-                  <p className="text-xs opacity-80">{format(new Date(ev.startAt), "HH:mm")}</p>
+                  <p className="text-xs opacity-80">{formatIST(ev.startAt, "time")}</p>
                 </div>
               );
             })
@@ -269,19 +271,19 @@ function MonthView({ current, events, onEventClick, onDayClick }: any) {
       </div>
       <div className="flex-1 grid grid-cols-7" style={{ gridAutoRows: "1fr" }}>
         {days.map((day) => {
-          const dayEvents = events.filter((e: any) => isSameDay(new Date(e.startAt), day));
+          const dayEvents = events.filter((e: any) => istDateString(e.startAt) === istDateString(day));
           return (
             <div
               key={day.toISOString()}
               className="border-r border-b p-1 min-h-[80px] cursor-pointer hover:bg-[var(--muted)]"
-              style={{ borderColor: "var(--border)", opacity: isSameMonth(day, current) ? 1 : 0.4 }}
+              style={{ borderColor: "var(--border)", opacity: istDateString(day).slice(0, 7) === istDateString(current).slice(0, 7) ? 1 : 0.4 }}
               onClick={() => onDayClick(day)}
             >
               <p
                 className="text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full"
-                style={isToday(day) ? { background: "var(--primary)", color: "white" } : { color: "var(--foreground)" }}
+                style={isTodayIST(day) ? { background: "var(--primary)", color: "white" } : { color: "var(--foreground)" }}
               >
-                {format(day, "d")}
+                {formatIST(day, "day")}
               </p>
               {dayEvents.slice(0, 3).map((ev: any) => (
                 <div
@@ -306,12 +308,12 @@ function MonthView({ current, events, onEventClick, onDayClick }: any) {
 
 function DayView({ current, events, onEventClick }: any) {
   const dayEvents = events
-    .filter((e: any) => isSameDay(new Date(e.startAt), current))
+    .filter((e: any) => istDateString(e.startAt) === istDateString(current))
     .sort((a: any, b: any) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
   return (
     <div className="p-4 space-y-2 overflow-y-auto" style={{ background: "var(--card)" }}>
-      <h3 className="text-sm font-medium mb-4" style={{ color: "var(--foreground)" }}>{format(current, "EEEE, MMMM d")}</h3>
+      <h3 className="text-sm font-medium mb-4" style={{ color: "var(--foreground)" }}>{formatIST(current, "weekdayMonthDay")}</h3>
       {dayEvents.length === 0 ? (
         <p className="text-sm text-center py-12" style={{ color: "var(--muted-foreground)" }}>No events today</p>
       ) : dayEvents.map((ev: any) => (
@@ -323,7 +325,7 @@ function DayView({ current, events, onEventClick }: any) {
 
 function AgendaView({ events, onEventClick }: any) {
   const sorted = [...events]
-    .filter((e) => new Date(e.startAt) >= startOfDay(new Date()))
+    .filter((e) => new Date(e.startAt) >= startOfDayIST())
     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
     .slice(0, 50);
 
@@ -333,7 +335,7 @@ function AgendaView({ events, onEventClick }: any) {
       {sorted.length === 0 ? (
         <p className="text-sm text-center py-12" style={{ color: "var(--muted-foreground)" }}>No upcoming events</p>
       ) : sorted.map((ev) => {
-        const dateStr = format(new Date(ev.startAt), "EEE, MMM d");
+        const dateStr = formatIST(ev.startAt, "shortWeekdayMonthDay");
         const showDate = dateStr !== lastDate;
         lastDate = dateStr;
         return (
@@ -358,12 +360,12 @@ function EventCard({ event, onClick }: { event: any; onClick: () => void }) {
       style={{ borderColor: "var(--border)", borderLeft: `3px solid ${color}` }}
     >
       <div className="shrink-0 text-xs font-medium" style={{ color }}>
-        {format(new Date(event.startAt), "HH:mm")}
+        {formatIST(event.startAt, "time")}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>{event.title}</p>
         <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          {format(new Date(event.startAt), "HH:mm")} – {format(new Date(event.endAt), "HH:mm")}
+          {formatIST(event.startAt, "time")} – {formatIST(event.endAt, "time")}
           {event.organizer && ` · ${event.organizer.name}`}
         </p>
       </div>
@@ -391,8 +393,8 @@ function EventDetail({ event, onClose, onCancel }: { event: any; onClose: () => 
           <button onClick={onClose} style={{ color: "var(--muted-foreground)" }}><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3 text-sm">
-          <Row label="Date" value={format(new Date(event.startAt), "EEEE, MMMM d, yyyy")} />
-          <Row label="Time" value={`${format(new Date(event.startAt), "HH:mm")} – ${format(new Date(event.endAt), "HH:mm")}`} />
+          <Row label="Date" value={formatIST(event.startAt, "weekdayMonthDayYear")} />
+          <Row label="Time" value={`${formatIST(event.startAt, "time")} – ${formatIST(event.endAt, "time")}`} />
           {event.organizer && <Row label="Organizer" value={event.organizer.name} />}
           {event.participants?.length > 0 && <Row label="Participants" value={event.participants.map((p: any) => p.name).join(", ")} />}
           {event.contact && <Row label="Contact" value={`${event.contact.firstName} ${event.contact.lastName}`} />}
@@ -427,11 +429,12 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 
 function EventForm({ users, contacts, defaultDate, onSubmit, onClose, loading }: any) {
   const d = defaultDate ?? new Date();
-  const dateStr = format(d, "yyyy-MM-dd");
-  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
-  const startTime = hasTime ? format(d, "HH:mm") : "09:00";
+  const dateStr = istDateString(d);
+  const { hour: dHour, minute: dMinute } = istHourMinute(d);
+  const hasTime = dHour !== 0 || dMinute !== 0;
+  const startTime = hasTime ? formatIST(d, "time") : "09:00";
   const endD = new Date(d.getTime() + 60 * 60 * 1000);
-  const endTime = hasTime ? format(endD, "HH:mm") : "10:00";
+  const endTime = hasTime ? formatIST(endD, "time") : "10:00";
 
   const [form, setForm] = useState({
     title: "", type: "MEETING",

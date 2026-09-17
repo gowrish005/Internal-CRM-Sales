@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser, isManager, eventScope, leadScope, assertEventOwnership } from "@/lib/dal";
 import { createEventSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
+import { parseISTDateTime } from "@/lib/date";
 
 export async function getEvents({
   from,
@@ -57,9 +58,9 @@ export async function createEvent(data: unknown) {
   const event = await prisma.calendarEvent.create({
     data: {
       ...rest,
-      startAt: new Date(startAt),
-      endAt: new Date(endAt),
-      reminderAt: reminderAt ? new Date(reminderAt) : undefined,
+      startAt: parseISTDateTime(startAt),
+      endAt: parseISTDateTime(endAt),
+      reminderAt: reminderAt ? parseISTDateTime(reminderAt) : undefined,
       participants: { connect: participantIds.map((id) => ({ id })) },
     },
     include: {
@@ -102,9 +103,9 @@ export async function updateEvent(id: string, data: unknown) {
     where: { id },
     data: {
       ...rest,
-      startAt: startAt ? new Date(startAt) : undefined,
-      endAt: endAt ? new Date(endAt) : undefined,
-      reminderAt: reminderAt ? new Date(reminderAt) : undefined,
+      startAt: startAt ? parseISTDateTime(startAt) : undefined,
+      endAt: endAt ? parseISTDateTime(endAt) : undefined,
+      reminderAt: reminderAt ? parseISTDateTime(reminderAt) : undefined,
       participants: participantIds ? { set: participantIds.map((pid) => ({ id: pid })) } : undefined,
     },
   });
