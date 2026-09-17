@@ -7,6 +7,7 @@ import { notifyTaskCreated } from "@/lib/notify";
 import {
   type CurrentUser, requireUser, isManager, taskScope, leadScope, eventScope, assertTaskAccess,
 } from "@/lib/dal";
+import { startOfDayIST, addDaysIST, parseISTDateOnly } from "@/lib/date";
 
 /**
  * Employees work only on their own tasks: force the owner to themselves, and
@@ -40,9 +41,8 @@ export async function getTasks({
   const user = await requireUser();
 
   const where: any = { isArchived: false, ...taskScope(user) };
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today.getTime() + 86400000);
+  const today = startOfDayIST();
+  const tomorrow = addDaysIST(today, 1);
 
   if (view === "today") { where.dueAt = { gte: today, lt: tomorrow }; where.status = { not: "COMPLETED" }; }
   else if (view === "overdue") { where.dueAt = { lt: today }; where.status = { not: "COMPLETED" }; }
@@ -77,7 +77,7 @@ export async function createTask(data: unknown) {
   const task = await prisma.task.create({
     data: {
       ...rest,
-      dueAt: dueAt ? new Date(dueAt) : undefined,
+      dueAt: dueAt ? parseISTDateOnly(dueAt) : undefined,
     },
   });
 
@@ -119,7 +119,7 @@ export async function updateTask(id: string, data: unknown) {
 
   const task = await prisma.task.update({
     where: { id },
-    data: { ...rest, dueAt: dueAt ? new Date(dueAt) : undefined },
+    data: { ...rest, dueAt: dueAt ? parseISTDateOnly(dueAt) : undefined },
   });
 
   if (prev?.status !== "COMPLETED" && task.status === "COMPLETED") {

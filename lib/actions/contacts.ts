@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireManager } from "@/lib/dal";
 import { createContactSchema, createNoteSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
+import { parseISTDateOnly } from "@/lib/date";
 
 export async function getContacts({
   search,
@@ -94,7 +95,7 @@ export async function createContact(data: unknown) {
     data: {
       ...rest,
       email: rest.email || undefined,
-      nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt) : undefined,
+      nextFollowUpAt: nextFollowUpAt ? parseISTDateOnly(nextFollowUpAt) : undefined,
     },
   });
 
@@ -124,7 +125,7 @@ export async function updateContact(id: string, data: unknown) {
     data: {
       ...rest,
       email: rest.email || undefined,
-      nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt) : undefined,
+      nextFollowUpAt: nextFollowUpAt ? parseISTDateOnly(nextFollowUpAt) : undefined,
     },
   });
 

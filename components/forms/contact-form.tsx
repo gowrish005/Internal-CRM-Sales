@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { istDateString } from "@/lib/date";
 
 interface Props {
   users: any[];
@@ -30,7 +31,7 @@ export function ContactForm({ users, onSubmit, onClose, loading, initial }: Prop
     leadStatus: initial?.leadStatus || "NEW",
     leadSource: initial?.leadSource || "",
     priority: initial?.priority || "MEDIUM",
-    nextFollowUpAt: initial?.nextFollowUpAt ? initial.nextFollowUpAt.slice(0, 10) : "",
+    nextFollowUpAt: initial?.nextFollowUpAt ? istDateString(initial.nextFollowUpAt) : "",
   });
 
   function set(field: string, value: string) {

@@ -1,5 +1,5 @@
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { format, isToday, isTomorrow } from "date-fns";
+import { formatIST, isTomorrowIST } from "@/lib/date";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
@@ -12,7 +12,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>Dashboard</h1>
         <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-          {format(new Date(), "EEEE, MMMM d")}
+          {formatIST(new Date(), "weekdayMonthDay")}
         </p>
       </div>
 
@@ -128,7 +128,7 @@ function MeetingRow({ meeting, compact }: { meeting: any; compact?: boolean }) {
     <div className="px-4 py-2.5 flex items-start gap-3">
       <div className="shrink-0 text-center w-10">
         <p className="text-xs font-medium" style={{ color: "#22c55e" }}>
-          {format(new Date(meeting.startAt), "HH:mm")}
+          {formatIST(meeting.startAt, "time")}
         </p>
       </div>
       <div className="flex-1 min-w-0">
@@ -141,12 +141,12 @@ function MeetingRow({ meeting, compact }: { meeting: any; compact?: boolean }) {
         )}
         {!compact && (
           <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-            {format(new Date(meeting.startAt), "HH:mm")} – {format(new Date(meeting.endAt), "HH:mm")}
+            {formatIST(meeting.startAt, "time")} – {formatIST(meeting.endAt, "time")}
           </p>
         )}
         {compact && (
           <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-            {isTomorrow(new Date(meeting.startAt)) ? "Tomorrow" : format(new Date(meeting.startAt), "EEE, MMM d")} · {format(new Date(meeting.startAt), "HH:mm")}
+            {isTomorrowIST(meeting.startAt) ? "Tomorrow" : formatIST(meeting.startAt, "shortWeekdayMonthDay")} · {formatIST(meeting.startAt, "time")}
           </p>
         )}
       </div>
@@ -170,7 +170,7 @@ function ActivityRow({ activity }: { activity: any }) {
     <div className="px-4 py-2.5">
       <p className="text-xs" style={{ color: "var(--foreground)" }}>{activity.description}</p>
       <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-        {activity.user?.name} · {format(new Date(activity.createdAt), "MMM d, HH:mm")}
+        {activity.user?.name} · {formatIST(activity.createdAt, "monthDayTime")}
       </p>
     </div>
   );

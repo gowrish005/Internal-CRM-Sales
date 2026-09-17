@@ -5,6 +5,7 @@ import { requireUser, requireManager, isManager, leadScope, assertLeadAccess } f
 import { createLeadSchema, updateLeadSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { isLeadStatus } from "@/lib/lead-status";
+import { parseISTDateOnly } from "@/lib/date";
 
 export async function getLeads({
   search,
@@ -48,8 +49,8 @@ export async function createLead(data: unknown) {
     data: {
       ...rest,
       estimatedValue: estimatedValue ?? undefined,
-      expectedCloseAt: expectedCloseAt ? new Date(expectedCloseAt) : undefined,
-      nextFollowUpAt: nextFollowUpAt ? new Date(nextFollowUpAt) : undefined,
+      expectedCloseAt: expectedCloseAt ? parseISTDateOnly(expectedCloseAt) : undefined,
+      nextFollowUpAt: nextFollowUpAt ? parseISTDateOnly(nextFollowUpAt) : undefined,
       lastActivityAt: new Date(),
     },
   });
@@ -109,7 +110,7 @@ export async function updateLead(id: string, data: unknown) {
   if (d.priority !== undefined) updateData.priority = d.priority;
   if (d.track !== undefined) updateData.track = d.track === null ? null : Number(d.track);
   if (d.estimatedValue !== undefined) updateData.estimatedValue = d.estimatedValue === null ? null : Number(d.estimatedValue);
-  if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null;
+  if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? parseISTDateOnly(d.nextFollowUpAt) : null;
   for (const k of ["phone", "email", "college", "branch", "usn"] as const) {
     if (d[k] !== undefined) updateData[k] = d[k]?.trim() || null;
   }
