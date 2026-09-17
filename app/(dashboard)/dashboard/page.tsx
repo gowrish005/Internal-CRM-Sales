@@ -1,5 +1,5 @@
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { formatIST, isTomorrowIST } from "@/lib/date";
+import { formatIST, isTomorrowIST, startOfDayIST } from "@/lib/date";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, isLeadStatus } from "@/lib/lead-status";
@@ -184,7 +184,7 @@ function TaskRow({ task }: { task: any }) {
 }
 
 function LeadFollowUpRow({ lead }: { lead: FollowUpLead }) {
-  const overdue = lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
+  const overdue = lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < startOfDayIST();
   return (
     <Link href={`/crm/leads/${lead.id}`} className="px-4 py-2.5 flex items-center gap-3 hover:opacity-80 transition-opacity">
       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isLeadStatus(lead.status) ? LEAD_STATUS_COLORS[lead.status] : undefined }} />
@@ -193,7 +193,7 @@ function LeadFollowUpRow({ lead }: { lead: FollowUpLead }) {
         <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{isLeadStatus(lead.status) ? LEAD_STATUS_LABELS[lead.status] : lead.status}</p>
       </div>
       <span className="text-xs shrink-0" style={{ color: overdue ? "#dc2626" : "var(--muted-foreground)" }}>
-        {lead.nextFollowUpAt ? format(new Date(lead.nextFollowUpAt), "MMM d") : "—"}
+        {lead.nextFollowUpAt ? formatIST(lead.nextFollowUpAt, "dayMonth") : "—"}
       </span>
     </Link>
   );
