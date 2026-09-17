@@ -3,8 +3,10 @@
 import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
-import { createLead, updateLeadStatus, updateLead, archiveLead, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
+import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check } from "lucide-react";
+import { createLead, updateLeadStatus, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
+import { saveLeadOrder } from "@/lib/lead-order";
+import { useToast } from "@/components/crm/toast-provider";
 import { formatCurrency } from "@/lib/utils";
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
 
@@ -150,7 +152,6 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
   const [{ view, filters, sort }, updatePrefs] = useLeadPrefs();
   const setView = (v: Prefs["view"]) => updatePrefs((p) => ({ ...p, view: v }));
   const [showForm, setShowForm] = useState(false);
-  const [editingLead, setEditingLead] = useState<any>(null);
   const [showDivide, setShowDivide] = useState(false);
   const [showCSV, setShowCSV] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -177,6 +178,15 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
   const deferredSearch = useDeferredValue(filters.search);
   const effectiveFilters = useMemo(() => ({ ...filters, search: deferredSearch }), [filters, deferredSearch]);
   const displayed = useMemo(() => applySort(applyFilters(leads, effectiveFilters), sort), [leads, effectiveFilters, sort]);
+  const notify = useToast();
+
+  // Opening a lead goes to its own page. Remember the list's current order
+  // (filters + sort) so ←/→ there walks the same sequence.
+  function openLead(lead: any) {
+    saveLeadOrder(displayed.map((l) => l.id));
+    router.push(`/crm/leads/${lead.id}`);
+  }
+
   const activeFilterCount =
     (filters.search.trim() ? 1 : 0) + (filters.followUp ? 1 : 0) +
     [filters.statuses, filters.priorities, filters.owners, filters.tracks, filters.sources, filters.tags, filters.passoutYears].filter((a) => a.length).length;
@@ -189,30 +199,6 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
   // touches a lead that's already assigned, and it never reaches outside
   // the leads currently in view.
   const unassignedInView = useMemo(() => displayed.filter((l) => !l.ownerId), [displayed]);
-
-  // Lead detail modal: which lead in `displayed` is open, so ←/→ can step
-  // to its neighbor regardless of which page it's on.
-  const editingIndex = editingLead ? displayed.findIndex((l) => l.id === editingLead.id) : -1;
-  function goToAdjacentLead(dir: 1 | -1) {
-    if (editingIndex === -1) return;
-    const next = displayed[editingIndex + dir];
-    if (next) setEditingLead(next);
-  }
-
-  // Quick status change (↑/↓ in the lead modal) — applies immediately, same
-  // as dragging a card between kanban columns, rather than waiting for Save.
-  async function handleQuickStatus(id: string, status: Status) {
-    setLeads((prev) => prev.map((l) => l.id === id ? { ...l, status } : l));
-    setEditingLead((prev: any) => prev && prev.id === id ? { ...prev, status } : prev);
-    startTransition(async () => {
-      try {
-        await updateLeadStatus(id, status);
-      } catch (err: any) {
-        setLeads(initial);
-        alert("Error: " + err.message);
-      }
-    });
-  }
 
   // Table pagination — keeps the DOM small when there are many leads instead
   // of rendering every row at once.
@@ -247,19 +233,6 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
     });
   }
 
-  async function handleUpdate(id: string, data: any) {
-    startTransition(async () => {
-      try {
-        const updated = await updateLead(id, data);
-        setLeads((prev) => prev.map((l) => l.id === id ? { ...l, ...updated } : l));
-        setEditingLead(null);
-        router.refresh();
-      } catch (err: any) {
-        alert("Error: " + err.message);
-      }
-    });
-  }
-
   async function handleDrop(status: Status) {
     if (!dragging || dragOver === null) return;
     const lead = leads.find((l) => l.id === dragging);
@@ -268,8 +241,9 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
     startTransition(async () => {
       try {
         await updateLeadStatus(dragging, status);
-      } catch {
+      } catch (err: any) {
         setLeads(initial);
+        notify(`Couldn't change status: ${err.message}`, "error");
       }
     });
     setDragging(null);
@@ -423,14 +397,14 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                     draggable
                     onDragStart={() => setDragging(lead.id)}
                     onDragEnd={() => { setDragging(null); setDragOver(null); }}
-                    onClick={() => setEditingLead(lead)}
+                    onClick={() => openLead(lead)}
                     className="rounded-md border p-3 cursor-grab active:cursor-grabbing"
                     style={{ background: "var(--card)", borderColor: "var(--border)", opacity: dragging === lead.id ? 0.5 : 1 }}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <p className="text-sm font-medium mb-1 flex-1" style={{ color: "var(--foreground)" }}>{lead.name}</p>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }}
+                        onClick={(e) => { e.stopPropagation(); openLead(lead); }}
                         className="shrink-0 p-0.5 rounded hover:bg-[var(--secondary)]"
                         style={{ color: "var(--muted-foreground)" }}
                         title="Edit"
@@ -483,7 +457,7 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                 {displayed.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>{leads.length ? "No leads match these filters" : "No leads yet"}</td></tr>
                 ) : paged.map((l) => (
-                  <tr key={l.id} onClick={() => setEditingLead(l)} className="border-b cursor-pointer hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
+                  <tr key={l.id} onClick={() => openLead(l)} className="border-b cursor-pointer hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
                     <td className="px-4 py-2.5">
                       <div className="font-medium" style={{ color: "var(--foreground)" }}>{l.name}</div>
                       {l.usn && <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>{l.usn}</div>}
@@ -509,7 +483,7 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--foreground)" }}>{l.estimatedValue ? formatCurrency(l.estimatedValue) : "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleDateString() : "—"}</td>
                     <td className="px-4 py-2.5">
-                      <button onClick={(e) => { e.stopPropagation(); setEditingLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
+                      <button onClick={(e) => { e.stopPropagation(); openLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
                         <Edit2 size={13} />
                       </button>
                     </td>
@@ -561,23 +535,6 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
         <LeadForm users={users} canManage={canManage} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
 
-      {editingLead && (
-        <LeadEditModal
-          canManage={canManage}
-          key={editingLead.id}
-          lead={editingLead}
-          users={users}
-          onSubmit={(data: any) => handleUpdate(editingLead.id, data)}
-          onClose={() => setEditingLead(null)}
-          loading={isPending}
-          onNavigate={goToAdjacentLead}
-          hasPrev={editingIndex > 0}
-          hasNext={editingIndex !== -1 && editingIndex < displayed.length - 1}
-          position={editingIndex !== -1 ? `${editingIndex + 1} of ${displayed.length}` : undefined}
-          onQuickStatus={handleQuickStatus}
-        />
-      )}
-
       {canManage && showDivide && (
         <DivideModal
           users={users}
@@ -593,6 +550,7 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
       {canManage && showCSV && (
         <CSVImportModal users={users} onSubmit={handleCSVImport} onClose={() => setShowCSV(false)} loading={isPending} />
       )}
+
     </div>
   );
 }
@@ -639,122 +597,6 @@ function LeadForm({ users, canManage, onSubmit, onClose, loading }: any) {
         </div>
         <F label="Next Follow-up"><input type="date" value={form.nextFollowUpAt} onChange={(e) => set("nextFollowUpAt", e.target.value)} className="fi" /></F>
         <ModalActions onClose={onClose} loading={loading} submitLabel="Create Lead" />
-      </form>
-      <FiStyle />
-    </Modal>
-  );
-}
-
-function LeadEditModal({ lead, users, canManage, onSubmit, onClose, loading, onNavigate, hasPrev, hasNext, position, onQuickStatus }: any) {
-  const [form, setForm] = useState({
-    name: lead.name || "",
-    phone: lead.phone || "",
-    email: lead.email || "",
-    college: lead.college || "",
-    branch: lead.branch || "",
-    usn: lead.usn || "",
-    passoutYear: lead.passoutYear ? String(lead.passoutYear) : "",
-    ownerId: lead.ownerId || "",
-    source: lead.source || "",
-    status: lead.status || "NEW",
-    priority: lead.priority || "MEDIUM",
-    track: lead.track ? String(lead.track) : "",
-    estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
-    nextFollowUpAt: lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().slice(0,10) : "",
-  });
-  const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
-
-  // Keyboard shortcuts while this lead's popup is open: ←/→ step to the
-  // previous/next lead (from the panel's current view), ↑/↓ cycle its status
-  // immediately (same as dragging a kanban card). Skipped while a form field
-  // has focus so typing and native <select> arrow-key behavior aren't hijacked.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "ArrowRight" && onNavigate) { e.preventDefault(); onNavigate(1); }
-      else if (e.key === "ArrowLeft" && onNavigate) { e.preventDefault(); onNavigate(-1); }
-      else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        const dir = e.key === "ArrowUp" ? -1 : 1;
-        const idx = STATUSES.indexOf(form.status as Status);
-        const nextIdx = Math.min(STATUSES.length - 1, Math.max(0, idx + dir));
-        const nextStatus = STATUSES[nextIdx];
-        if (nextStatus !== form.status) {
-          set("status", nextStatus);
-          onQuickStatus?.(lead.id, nextStatus);
-        }
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [form.status, lead.id, onNavigate, onQuickStatus]);
-
-  const navButtons = (onNavigate || position) && (
-    <div className="flex items-center gap-0.5 mr-1">
-      <button
-        type="button"
-        onClick={() => onNavigate?.(-1)}
-        disabled={!hasPrev}
-        title="Previous lead (←)"
-        className="flex items-center justify-center w-6 h-6 rounded-md disabled:opacity-30"
-        style={{ color: "var(--muted-foreground)", background: "rgba(255,255,255,0.05)" }}
-      >
-        <ChevronLeft size={14} />
-      </button>
-      {position && <span className="text-xs px-1" style={{ color: "rgba(255,255,255,0.35)" }}>{position}</span>}
-      <button
-        type="button"
-        onClick={() => onNavigate?.(1)}
-        disabled={!hasNext}
-        title="Next lead (→)"
-        className="flex items-center justify-center w-6 h-6 rounded-md disabled:opacity-30"
-        style={{ color: "var(--muted-foreground)", background: "rgba(255,255,255,0.05)" }}
-      >
-        <ChevronRight size={14} />
-      </button>
-    </div>
-  );
-
-  return (
-    <Modal title="Edit Lead" onClose={onClose} headerRight={navButtons}>
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit({
-          name: form.name,
-          phone: form.phone,
-          email: form.email,
-          college: form.college,
-          branch: form.branch,
-          usn: form.usn,
-          passoutYear: form.passoutYear ? parseInt(form.passoutYear) : null,
-          ownerId: form.ownerId || undefined,
-          source: form.source || undefined,
-          status: form.status,
-          priority: form.priority,
-          track: form.track ? parseInt(form.track) : undefined,
-          estimatedValue: form.estimatedValue ? parseFloat(form.estimatedValue) : undefined,
-          nextFollowUpAt: form.nextFollowUpAt || undefined,
-        });
-      }} className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
-        <F label="Lead Name" required><input value={form.name} onChange={(e) => set("name", e.target.value)} required className="fi" /></F>
-        <div className="grid grid-cols-2 gap-3">
-          <F label="Phone"><input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className="fi" /></F>
-          <F label="Email"><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className="fi" /></F>
-          <F label="College"><input value={form.college} onChange={(e) => set("college", e.target.value)} className="fi" /></F>
-          <F label="Branch"><input value={form.branch} onChange={(e) => set("branch", e.target.value)} className="fi" /></F>
-          <F label="USN"><input value={form.usn} onChange={(e) => set("usn", e.target.value)} className="fi" /></F>
-          <F label="Passout Year"><input type="number" value={form.passoutYear} onChange={(e) => set("passoutYear", e.target.value)} className="fi" placeholder="2027" /></F>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {canManage && (<F label="Owner (Assigned To)"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>)}
-          <F label="Status (↑↓)"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}</select></F>
-          <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
-          <F label="Track"><select value={form.track} onChange={(e) => set("track", e.target.value)} className="fi"><option value="">None</option><option value="1">Track 1</option><option value="2">Track 2</option><option value="3">Track 3</option></select></F>
-          <F label="Est. Value (₹)"><input type="number" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)} className="fi" placeholder="0" /></F>
-        </div>
-        <F label="Next Follow-up"><input type="date" value={form.nextFollowUpAt} onChange={(e) => set("nextFollowUpAt", e.target.value)} className="fi" /></F>
-        <ModalActions onClose={onClose} loading={loading} submitLabel="Save Changes" />
       </form>
       <FiStyle />
     </Modal>

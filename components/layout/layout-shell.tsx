@@ -7,6 +7,7 @@ import { PageTransition } from "./page-transition";
 import { FCMProvider } from "@/components/notifications/fcm-provider";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { NotificationPrompt } from "@/components/notifications/notification-prompt";
+import { ToastProvider } from "@/components/crm/toast-provider";
 
 interface LayoutShellProps {
   user: { name?: string | null; email?: string | null; image?: string | null; role?: string };
@@ -16,7 +17,11 @@ interface LayoutShellProps {
 export function LayoutShell({ user, children }: LayoutShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // ToastProvider sits above PageTransition on purpose: PageTransition is keyed
+  // by pathname, which remounts everything below it on navigation — a toast
+  // raised just before moving to the next lead would be thrown away.
   return (
+    <ToastProvider>
     <div className="flex h-screen overflow-hidden">
       {/* Mobile backdrop */}
       {sidebarOpen && (
@@ -49,5 +54,6 @@ export function LayoutShell({ user, children }: LayoutShellProps) {
 
       <FCMProvider />
     </div>
+    </ToastProvider>
   );
 }

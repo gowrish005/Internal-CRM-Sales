@@ -1,8 +1,9 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireUser, requireManager, isManager, leadScope, assertLeadAccess } from "@/lib/dal";
-import { createLeadSchema, updateLeadSchema } from "@/lib/validations";
+import { requireUser, requireManager, isManager, leadScope } from "@/lib/dal";
+import { applyLeadUpdate } from "@/lib/lead-service";
+import { createLeadSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { isLeadStatus } from "@/lib/lead-status";
 
@@ -31,6 +32,39 @@ export async function getLeads({
       owner: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Everything the lead page shows, or null if the lead doesn't exist or isn't yours. */
+export async function getLead(id: string) {
+  const user = await requireUser();
+  if (!/^[0-9a-f]{24}$/i.test(id)) return null;
+
+  return prisma.lead.findFirst({
+    where: { id, isArchived: false, ...leadScope(user) },
+    include: {
+      owner: { select: { id: true, name: true } },
+      notes: {
+        include: { author: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+      },
+      activities: {
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      },
+      tasks: {
+        where: { isArchived: false },
+        select: { id: true, title: true, status: true, priority: true, dueAt: true, owner: { select: { name: true } } },
+        orderBy: [{ status: "asc" }, { dueAt: "asc" }],
+      },
+      meetings: {
+        where: { isCancelled: false },
+        select: { id: true, title: true, type: true, startAt: true, endAt: true },
+        orderBy: { startAt: "desc" },
+        take: 10,
+      },
+    },
   });
 }
 
@@ -70,70 +104,12 @@ export async function createLead(data: unknown) {
 export async function updateLeadStatus(id: string, status: string) {
   const user = await requireUser();
   if (!isLeadStatus(status)) throw new Error("Invalid status");
-  await assertLeadAccess(user, id);
-
-  const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true, status: true } });
-  if (!lead) throw new Error("Lead not found");
-
-  const updated = await prisma.lead.update({
-    where: { id },
-    data: { status, lastActivityAt: new Date() },
-  });
-
-  await prisma.activity.create({
-    data: {
-      type: "LEAD_STATUS_CHANGED",
-      description: `Moved "${lead.name}" from ${lead.status} to ${status}`,
-      userId: user.id,
-      leadId: id,
-    },
-  });
-
-  revalidatePath("/crm/leads");
-  return updated;
+  return applyLeadUpdate(user, id, { status });
 }
 
 export async function updateLead(id: string, data: unknown) {
   const user = await requireUser();
-  await assertLeadAccess(user, id);
-
-  const parsed = updateLeadSchema.safeParse(data);
-  if (!parsed.success) throw new Error(parsed.error.message);
-
-  const d = parsed.data;
-
-  // Build update payload — only include fields that were actually provided
-  const updateData: Record<string, any> = { lastActivityAt: new Date() };
-  if (d.name !== undefined) updateData.name = d.name;
-  if (d.status !== undefined) updateData.status = d.status;
-  if (d.priority !== undefined) updateData.priority = d.priority;
-  if (d.track !== undefined) updateData.track = d.track === null ? null : Number(d.track);
-  if (d.estimatedValue !== undefined) updateData.estimatedValue = d.estimatedValue === null ? null : Number(d.estimatedValue);
-  if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null;
-  for (const k of ["phone", "email", "college", "branch", "usn"] as const) {
-    if (d[k] !== undefined) updateData[k] = d[k]?.trim() || null;
-  }
-  if (d.passoutYear !== undefined) updateData.passoutYear = d.passoutYear ?? null;
-  if (d.tags !== undefined) updateData.tags = d.tags;
-  // ObjectId fields — only set if non-empty string (prevents passing "" to Prisma)
-  // Reassigning a lead is a manager decision.
-  if (d.ownerId !== undefined && isManager(user)) updateData.ownerId = d.ownerId || null;
-  if (d.source !== undefined) updateData.source = d.source || null;
-
-  try {
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: updateData,
-      include: {
-        owner: { select: { id: true, name: true } },
-      },
-    });
-    revalidatePath("/crm/leads");
-    return lead;
-  } catch (err: any) {
-    console.error("[updateLead] Prisma error:", JSON.stringify(updateData, null, 2), "\n", err?.message);
-    throw new Error(err?.message ?? "Failed to update lead");
-  }
+  return applyLeadUpdate(user, id, data);
 }
 
 export async function archiveLead(id: string) {
