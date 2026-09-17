@@ -111,7 +111,10 @@ export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProp
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-        {nav.filter(visible).map((item) => {
+        {nav
+          .filter(visible)
+          .filter((item) => !("children" in item) || item.children!.some(visible))
+          .map((item) => {
           if ("children" in item) {
             return (
               <div key={item.label} className="pt-4">
