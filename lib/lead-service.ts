@@ -15,7 +15,7 @@ export class LeadUpdateError extends Error {
  * page uses so saves aren't tied to client-side navigation).
  *
  * Only fields present in `data` change. A status change is also written to
- * the activity feed, whichever way it was made.
+ * the activity feed, whichever way it was made, with from/to/at metadata.
  */
 export async function applyLeadUpdate(user: CurrentUser, id: string, data: unknown) {
   const parsed = updateLeadSchema.safeParse(data);
@@ -57,6 +57,7 @@ export async function applyLeadUpdate(user: CurrentUser, id: string, data: unkno
         description: `Moved "${lead.name}" from ${current.status} to ${d.status}`,
         userId: user.id,
         leadId: id,
+        metadata: { from: current.status, to: d.status, at: lead.updatedAt },
       },
     });
   }
