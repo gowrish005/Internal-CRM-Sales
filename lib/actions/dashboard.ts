@@ -25,7 +25,8 @@ export async function getDashboardData() {
     // Managers get the org-wide feed (mirrors the manager-only /activity page);
     // employees get their own leads that need a follow-up call instead — that's
     // the job, not a feed of what already happened.
-    recentActivityOrFollowUps,
+    recentActivity,
+    leadsNeedingFollowUp,
   ] = await Promise.all([
     // B2B contacts are a manager-only list; employees get their open tasks instead.
     manager
@@ -65,12 +66,15 @@ export async function getDashboardData() {
           orderBy: { createdAt: "desc" },
           take: 15,
         })
-      : prisma.lead.findMany({
+      : Promise.resolve([]),
+    !manager
+      ? prisma.lead.findMany({
           where: { isArchived: false, status: { notIn: ["WON", "LOST"] }, nextFollowUpAt: { lte: tomorrow }, ...leadScope(user) },
           select: { id: true, name: true, status: true, phone: true, nextFollowUpAt: true },
           orderBy: { nextFollowUpAt: "asc" },
           take: 8,
-        }),
+        })
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -86,7 +90,7 @@ export async function getDashboardData() {
     todayMeetings,
     upcomingMeetings,
     tasksDueToday,
-    recentActivity: manager ? recentActivityOrFollowUps : [],
-    leadsNeedingFollowUp: manager ? [] : recentActivityOrFollowUps,
+    recentActivity,
+    leadsNeedingFollowUp,
   };
 }

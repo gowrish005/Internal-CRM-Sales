@@ -2,7 +2,9 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { LEAD_STATUS_COLORS, LEAD_STATUS_LABELS } from "@/lib/lead-status";
+import { LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, isLeadStatus } from "@/lib/lead-status";
+
+type FollowUpLead = Awaited<ReturnType<typeof getDashboardData>>["leadsNeedingFollowUp"][number];
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
@@ -88,7 +90,7 @@ export default async function DashboardPage() {
               {leadsNeedingFollowUp.length === 0 ? (
                 <Empty text="No follow-ups due" />
               ) : (
-                leadsNeedingFollowUp.map((l: any) => (
+                leadsNeedingFollowUp.map((l) => (
                   <LeadFollowUpRow key={l.id} lead={l} />
                 ))
               )}
@@ -181,19 +183,19 @@ function TaskRow({ task }: { task: any }) {
   );
 }
 
-function LeadFollowUpRow({ lead }: { lead: any }) {
+function LeadFollowUpRow({ lead }: { lead: FollowUpLead }) {
   const overdue = lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date(new Date().setHours(0, 0, 0, 0));
   return (
-    <div className="px-4 py-2.5 flex items-center gap-3">
-      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: LEAD_STATUS_COLORS[lead.status as keyof typeof LEAD_STATUS_COLORS] }} />
+    <Link href={`/crm/leads/${lead.id}`} className="px-4 py-2.5 flex items-center gap-3 hover:opacity-80 transition-opacity">
+      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isLeadStatus(lead.status) ? LEAD_STATUS_COLORS[lead.status] : undefined }} />
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate" style={{ color: "var(--foreground)" }}>{lead.name}</p>
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{LEAD_STATUS_LABELS[lead.status as keyof typeof LEAD_STATUS_LABELS]}</p>
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{isLeadStatus(lead.status) ? LEAD_STATUS_LABELS[lead.status] : lead.status}</p>
       </div>
       <span className="text-xs shrink-0" style={{ color: overdue ? "#dc2626" : "var(--muted-foreground)" }}>
         {lead.nextFollowUpAt ? format(new Date(lead.nextFollowUpAt), "MMM d") : "—"}
       </span>
-    </div>
+    </Link>
   );
 }
 
