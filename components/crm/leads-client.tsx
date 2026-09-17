@@ -42,7 +42,7 @@ const EMPTY_FILTERS: Filters = { search: "", statuses: [], priorities: [], owner
  * in-memory copy so the page still works where storage is blocked. */
 type Prefs = { view: "kanban" | "table"; filters: Filters; sort: Sort };
 const PREFS_KEY = "crm.leads.view";
-const DEFAULT_PREFS: Prefs = { view: "kanban", filters: EMPTY_FILTERS, sort: null };
+const DEFAULT_PREFS: Prefs = { view: "table", filters: EMPTY_FILTERS, sort: null };
 const prefsListeners = new Set<() => void>();
 let memoryPrefs: string | null = null;
 
@@ -316,11 +316,11 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
           <div className="flex rounded-md border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-            <button onClick={() => setView("kanban")} className="px-2.5 py-1.5" style={{ background: view === "kanban" ? "var(--secondary)" : "var(--card)", color: view === "kanban" ? "var(--foreground)" : "var(--muted-foreground)" }}>
-              <LayoutGrid size={14} />
-            </button>
-            <button onClick={() => setView("table")} className="px-2.5 py-1.5 border-l" style={{ borderColor: "var(--border)", background: view === "table" ? "var(--secondary)" : "var(--card)", color: view === "table" ? "var(--foreground)" : "var(--muted-foreground)" }}>
+            <button onClick={() => setView("table")} className="px-2.5 py-1.5" style={{ background: view === "table" ? "var(--secondary)" : "var(--card)", color: view === "table" ? "var(--foreground)" : "var(--muted-foreground)" }}>
               <List size={14} />
+            </button>
+            <button onClick={() => setView("kanban")} className="px-2.5 py-1.5 border-l" style={{ borderColor: "var(--border)", background: view === "kanban" ? "var(--secondary)" : "var(--card)", color: view === "kanban" ? "var(--foreground)" : "var(--muted-foreground)" }}>
+              <LayoutGrid size={14} />
             </button>
           </div>
 
