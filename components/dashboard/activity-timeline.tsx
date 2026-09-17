@@ -1,6 +1,7 @@
 "use client";
 
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { formatIST } from "@/lib/date";
 import {
   UserPlus,
   UserCheck,
@@ -73,7 +74,7 @@ export function ActivityTimeline({ activities }: { activities: any[] }) {
             <span
               className="text-xs shrink-0 tabular-nums"
               style={{ color: "var(--muted-foreground)" }}
-              title={format(new Date(a.createdAt), "MMM d, yyyy HH:mm")}
+              title={formatIST(a.createdAt, "monthDayYearTime")}
             >
               {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
             </span>

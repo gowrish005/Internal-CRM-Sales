@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Bell, CheckCheck, X } from "lucide-react";
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/actions/notifications";
+import { formatIST } from "@/lib/date";
 
 type Notification = {
   id: string;
@@ -175,5 +176,5 @@ function formatRelative(date: Date): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `${diffH}h ago`;
-  return date.toLocaleDateString();
+  return formatIST(date, "monthDayYear");
 }

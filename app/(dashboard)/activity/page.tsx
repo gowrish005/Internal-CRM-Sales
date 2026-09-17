@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { requireManagerPage } from "@/lib/dal";
-import { format } from "date-fns";
 import { ActivityTimeline } from "@/components/dashboard/activity-timeline";
 
 export default async function ActivityPage() {

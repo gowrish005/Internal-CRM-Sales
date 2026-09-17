@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { updateLeadSchema } from "@/lib/validations";
 import { type CurrentUser, isManager, leadScope } from "@/lib/dal";
+import { parseISTDateOnly } from "@/lib/date";
 
 export class LeadUpdateError extends Error {
   constructor(message: string, readonly status: 400 | 404) { super(message); }
@@ -34,7 +35,7 @@ export async function applyLeadUpdate(user: CurrentUser, id: string, data: unkno
   if (d.priority !== undefined) updateData.priority = d.priority;
   if (d.track !== undefined) updateData.track = d.track === null ? null : Number(d.track);
   if (d.estimatedValue !== undefined) updateData.estimatedValue = d.estimatedValue === null ? null : Number(d.estimatedValue);
-  if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null;
+  if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? parseISTDateOnly(d.nextFollowUpAt) : null;
   for (const k of ["phone", "email", "college", "branch", "usn"] as const) {
     if (d[k] !== undefined) updateData[k] = d[k]?.trim() || null;
   }

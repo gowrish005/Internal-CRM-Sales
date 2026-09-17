@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { format, formatDistanceToNow, isPast } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { formatIST, istDateString, parseISTDateOnly, endOfDayIST, isPastIST } from "@/lib/date";
 import { ArrowLeft, ChevronLeft, ChevronRight, Phone, Mail, CheckCircle, Circle, CalendarDays } from "lucide-react";
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
 import { parseLeadOrder, readLeadOrderRaw, subscribeLeadOrder } from "@/lib/lead-order";
@@ -27,7 +28,7 @@ function leadToForm(lead: any) {
     priority: lead.priority || "MEDIUM",
     track: lead.track ? String(lead.track) : "",
     estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
-    nextFollowUpAt: lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().slice(0, 10) : "",
+    nextFollowUpAt: lead.nextFollowUpAt ? istDateString(lead.nextFollowUpAt) : "",
   };
 }
 type Form = ReturnType<typeof leadToForm>;
@@ -179,7 +180,7 @@ export function LeadDetail({ lead, users, canManage }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [goTo, nextId, prevId, changeStatus]);
 
-  const followUpOverdue = form.nextFollowUpAt && isPast(new Date(form.nextFollowUpAt + "T23:59:59"));
+  const followUpOverdue = form.nextFollowUpAt && isPastIST(endOfDayIST(parseISTDateOnly(form.nextFollowUpAt)));
 
   return (
     <form
@@ -248,9 +249,9 @@ export function LeadDetail({ lead, users, canManage }: Props) {
             ) : <Empty>None recorded</Empty>}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
-            <Meta label="Created" value={format(new Date(lead.createdAt), "d MMM yyyy")} />
+            <Meta label="Created" value={formatIST(lead.createdAt, "dayMonthYear")} />
             <Meta label="Last activity" value={lead.lastActivityAt ? formatDistanceToNow(new Date(lead.lastActivityAt), { addSuffix: true }) : "—"} />
-            {lead.expectedCloseAt && <Meta label="Expected close" value={format(new Date(lead.expectedCloseAt), "d MMM yyyy")} />}
+            {lead.expectedCloseAt && <Meta label="Expected close" value={formatIST(lead.expectedCloseAt, "dayMonthYear")} />}
           </div>
         </Card>
 
@@ -328,7 +329,7 @@ export function LeadDetail({ lead, users, canManage }: Props) {
                 {lead.notes.map((n: any) => (
                   <li key={n.id} className="rounded-md px-2.5 py-2" style={{ background: "var(--muted)" }}>
                     <p className="text-xs whitespace-pre-line" style={{ color: "var(--foreground)" }}>{n.content}</p>
-                    <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground)" }}>{n.author?.name} · {format(new Date(n.createdAt), "d MMM, HH:mm")}</p>
+                    <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground)" }}>{n.author?.name} · {formatIST(n.createdAt, "dayMonthTime")}</p>
                   </li>
                 ))}
               </ul>
@@ -342,14 +343,14 @@ export function LeadDetail({ lead, users, canManage }: Props) {
                   <li key={t.id} className="flex items-center gap-2 text-xs">
                     {t.status === "COMPLETED" ? <CheckCircle size={13} color="#059669" /> : <Circle size={13} style={{ color: "var(--muted-foreground)" }} />}
                     <span className="flex-1 truncate" style={{ color: "var(--foreground)", textDecoration: t.status === "COMPLETED" ? "line-through" : undefined }}>{t.title}</span>
-                    {t.dueAt && <span style={{ color: "var(--muted-foreground)" }}>{format(new Date(t.dueAt), "d MMM")}</span>}
+                    {t.dueAt && <span style={{ color: "var(--muted-foreground)" }}>{formatIST(t.dueAt, "dayMonth")}</span>}
                   </li>
                 ))}
                 {lead.meetings.map((m: any) => (
                   <li key={m.id} className="flex items-center gap-2 text-xs">
                     <CalendarDays size={13} style={{ color: "var(--muted-foreground)" }} />
                     <span className="flex-1 truncate" style={{ color: "var(--foreground)" }}>{m.title}</span>
-                    <span style={{ color: "var(--muted-foreground)" }}>{format(new Date(m.startAt), "d MMM, HH:mm")}</span>
+                    <span style={{ color: "var(--muted-foreground)" }}>{formatIST(m.startAt, "dayMonthTime")}</span>
                   </li>
                 ))}
               </ul>
