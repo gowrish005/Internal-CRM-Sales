@@ -86,6 +86,7 @@ export async function updateLeadStatus(id: string, status: string) {
       description: `Moved "${lead.name}" from ${lead.status} to ${status}`,
       userId: user.id,
       leadId: id,
+      metadata: { from: lead.status, to: status, at: updated.updatedAt },
     },
   });
 
@@ -101,6 +102,14 @@ export async function updateLead(id: string, data: unknown) {
   if (!parsed.success) throw new Error(parsed.error.message);
 
   const d = parsed.data;
+
+  // Fetch the current status up front so a status change made through this
+  // general-purpose edit action (e.g. the lead popup's autosave) gets logged
+  // the same way a quick-status change does — every state transition needs a
+  // timestamped record of who changed it and from/to what.
+  const before = d.status !== undefined
+    ? await prisma.lead.findUnique({ where: { id }, select: { name: true, status: true } })
+    : null;
 
   // Build update payload — only include fields that were actually provided
   const updateData: Record<string, any> = { lastActivityAt: new Date() };
@@ -128,6 +137,19 @@ export async function updateLead(id: string, data: unknown) {
         owner: { select: { id: true, name: true } },
       },
     });
+
+    if (before && d.status !== undefined && d.status !== before.status) {
+      await prisma.activity.create({
+        data: {
+          type: "LEAD_STATUS_CHANGED",
+          description: `Moved "${before.name}" from ${before.status} to ${d.status}`,
+          userId: user.id,
+          leadId: id,
+          metadata: { from: before.status, to: d.status, at: lead.updatedAt },
+        },
+      });
+    }
+
     revalidatePath("/crm/leads");
     return lead;
   } catch (err: any) {
