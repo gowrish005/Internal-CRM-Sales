@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getCurrentUser, isManager, leadScope, taskScope } from "@/lib/dal";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get("q") || "";
   if (q.length < 2) return NextResponse.json({ contacts: [], branches: [], leads: [], tasks: [] });
 
   const [contacts, leads, tasks] = await Promise.all([
-    prisma.contact.findMany({
+    !isManager(user) ? [] : prisma.contact.findMany({
       where: {
         isArchived: false,
         OR: [
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     prisma.lead.findMany({
       where: {
         isArchived: false,
+        ...leadScope(user),
         OR: [
           { name: { contains: q, mode: "insensitive" } },
           { owner: { name: { contains: q, mode: "insensitive" } } },
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
     prisma.task.findMany({
       where: {
         isArchived: false,
+        ...taskScope(user),
         OR: [
           { title: { contains: q, mode: "insensitive" } },
           { owner: { name: { contains: q, mode: "insensitive" } } },

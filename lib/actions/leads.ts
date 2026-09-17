@@ -1,9 +1,10 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireUser, requireManager, isManager, leadScope, assertLeadAccess } from "@/lib/dal";
 import { createLeadSchema, updateLeadSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
+import { isLeadStatus } from "@/lib/lead-status";
 
 export async function getLeads({
   search,
@@ -16,13 +17,12 @@ export async function getLeads({
   ownerId?: string;
   track?: number;
 } = {}) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
 
-  const where: any = { isArchived: false };
+  const where: any = { isArchived: false, ...leadScope(user) };
   if (search) where.name = { contains: search, mode: "insensitive" };
   if (status) where.status = status;
-  if (ownerId) where.ownerId = ownerId;
+  if (ownerId && isManager(user)) where.ownerId = ownerId;
   if (track) where.track = track;
 
   return prisma.lead.findMany({
@@ -35,13 +35,14 @@ export async function getLeads({
 }
 
 export async function createLead(data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
 
   const parsed = createLeadSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
 
   const { expectedCloseAt, nextFollowUpAt, estimatedValue, ...rest } = parsed.data;
+  // Employees can only create leads for themselves.
+  if (!isManager(user)) rest.ownerId = user.id;
 
   const lead = await prisma.lead.create({
     data: {
@@ -57,7 +58,7 @@ export async function createLead(data: unknown) {
     data: {
       type: "LEAD_CREATED",
       description: `Created lead: ${lead.name}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       leadId: lead.id,
     },
   });
@@ -67,22 +68,23 @@ export async function createLead(data: unknown) {
 }
 
 export async function updateLeadStatus(id: string, status: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
+  if (!isLeadStatus(status)) throw new Error("Invalid status");
+  await assertLeadAccess(user, id);
 
   const lead = await prisma.lead.findUnique({ where: { id }, select: { name: true, status: true } });
   if (!lead) throw new Error("Lead not found");
 
   const updated = await prisma.lead.update({
     where: { id },
-    data: { status: status as any, lastActivityAt: new Date() },
+    data: { status, lastActivityAt: new Date() },
   });
 
   await prisma.activity.create({
     data: {
       type: "LEAD_STATUS_CHANGED",
       description: `Moved "${lead.name}" from ${lead.status} to ${status}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       leadId: id,
     },
   });
@@ -92,8 +94,8 @@ export async function updateLeadStatus(id: string, status: string) {
 }
 
 export async function updateLead(id: string, data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
+  await assertLeadAccess(user, id);
 
   const parsed = updateLeadSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
@@ -114,7 +116,8 @@ export async function updateLead(id: string, data: unknown) {
   if (d.passoutYear !== undefined) updateData.passoutYear = d.passoutYear ?? null;
   if (d.tags !== undefined) updateData.tags = d.tags;
   // ObjectId fields — only set if non-empty string (prevents passing "" to Prisma)
-  if (d.ownerId !== undefined) updateData.ownerId = d.ownerId || null;
+  // Reassigning a lead is a manager decision.
+  if (d.ownerId !== undefined && isManager(user)) updateData.ownerId = d.ownerId || null;
   if (d.source !== undefined) updateData.source = d.source || null;
 
   try {
@@ -134,8 +137,7 @@ export async function updateLead(id: string, data: unknown) {
 }
 
 export async function archiveLead(id: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  await requireManager();
 
   await prisma.lead.update({ where: { id }, data: { isArchived: true } });
   revalidatePath("/crm/leads");
@@ -150,8 +152,7 @@ export async function archiveLead(id: string) {
  * assignment even if the client's view was stale.
  */
 export async function divideLeads(leadIds: string[], userIds: string[]) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  await requireManager();
   if (!userIds.length) throw new Error("No users selected");
   if (!leadIds.length) throw new Error("No leads to divide");
 
@@ -191,11 +192,14 @@ export async function divideLeads(leadIds: string[], userIds: string[]) {
 }
 
 export async function importLeadsFromCSV(rows: { name: string; phone?: string; email?: string; college?: string; branch?: string; usn?: string; passoutYear?: number; status?: string; priority?: string; track?: number; estimatedValue?: number; source?: string; ownerId?: string }[]) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
   if (!rows.length) throw new Error("No rows to import");
 
-  const VALID_STATUS = ["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","LOST"];
+  // CSV "NO REPLY" / "no-reply" -> NO_REPLY
+  const toStatus = (s?: string) => {
+    const v = s?.trim().toUpperCase().replace(/[\s-]+/g, "_");
+    return isLeadStatus(v) ? v : "NEW";
+  };
   const VALID_PRIORITY = ["LOW","MEDIUM","HIGH"];
   const VALID_SOURCE = ["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"];
 
@@ -210,7 +214,7 @@ export async function importLeadsFromCSV(rows: { name: string; phone?: string; e
       branch: row.branch || undefined,
       usn: row.usn || undefined,
       passoutYear: row.passoutYear || undefined,
-      status: (VALID_STATUS.includes(row.status?.toUpperCase() ?? "") ? row.status!.toUpperCase() : "NEW") as any,
+      status: toStatus(row.status),
       priority: (VALID_PRIORITY.includes(row.priority?.toUpperCase() ?? "") ? row.priority!.toUpperCase() : "MEDIUM") as any,
       track: row.track && row.track >= 1 && row.track <= 3 ? row.track : undefined,
       estimatedValue: row.estimatedValue ?? undefined,
@@ -224,7 +228,7 @@ export async function importLeadsFromCSV(rows: { name: string; phone?: string; e
     data: {
       type: "LEAD_CREATED",
       description: `Imported ${count} leads from CSV`,
-      userId: (session.user as any).id,
+      userId: user.id,
     },
   });
 

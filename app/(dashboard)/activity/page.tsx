@@ -1,11 +1,10 @@
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireManagerPage } from "@/lib/dal";
 import { format } from "date-fns";
 import { ActivityTimeline } from "@/components/dashboard/activity-timeline";
 
 export default async function ActivityPage() {
-  const session = await auth();
-  if (!session?.user) return null;
+  await requireManagerPage();
 
   const activities = await prisma.activity.findMany({
     include: {

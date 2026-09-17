@@ -485,7 +485,7 @@ function EventForm({ users, contacts, defaultDate, onSubmit, onClose, loading }:
           <F label="Title" required><input value={form.title} onChange={(e) => set("title", e.target.value)} required className="fi" /></F>
           <div className="grid grid-cols-2 gap-3">
             <F label="Type"><select value={form.type} onChange={(e) => set("type", e.target.value)} className="fi">{["MEETING","CALL","EVENT","FOLLOW_UP"].map((t) => <option key={t} value={t}>{t.replace("_"," ")}</option>)}</select></F>
-            <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+            {contacts.length > 0 && (<F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>)}
             <F label="Start Time">
               <DatePicker
                 selected={form.startAt ? new Date(form.startAt) : null}

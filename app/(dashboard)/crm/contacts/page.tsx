@@ -1,12 +1,14 @@
 import { getContacts } from "@/lib/actions/contacts";
 import { getUsers } from "@/lib/actions/users";
 import { ContactsClient } from "@/components/crm/contacts-client";
+import { requireManagerPage } from "@/lib/dal";
 
 export default async function ContactsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await requireManagerPage();
   const params = await searchParams;
   const [{ contacts, total }, users] = await Promise.all([
     getContacts({

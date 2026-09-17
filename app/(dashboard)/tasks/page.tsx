@@ -3,7 +3,8 @@ import { getUsers } from "@/lib/actions/users";
 import { getContacts } from "@/lib/actions/contacts";
 import { getLeads } from "@/lib/actions/leads";
 import { TasksClient } from "@/components/crm/tasks-client";
-import { auth } from "@/lib/auth";
+import { getCurrentUser, isManager } from "@/lib/dal";
+import { redirect } from "next/navigation";
 
 export default async function TasksPage({
   searchParams,
@@ -12,14 +13,16 @@ export default async function TasksPage({
 }) {
   const params = await searchParams;
   const view = (params.view as any) || undefined;
-  const session = await auth();
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const canManage = isManager(user);
 
-  const [tasks, users, { contacts }, leads] = await Promise.all([
+  const [tasks, users, contacts, leads] = await Promise.all([
     getTasks({ view }),
     getUsers(),
-    getContacts({ limit: 200 }),
+    canManage ? getContacts({ limit: 200 }).then((r) => r.contacts) : [],
     getLeads(),
   ]);
 
-  return <TasksClient tasks={tasks as any} users={users as any} contacts={contacts as any} leads={leads as any} currentUserId={(session?.user as any)?.id} />;
+  return <TasksClient tasks={tasks as any} users={users as any} contacts={contacts as any} leads={leads as any} currentUserId={user.id} canManage={canManage} />;
 }

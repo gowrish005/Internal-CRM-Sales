@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEAD_STATUSES } from "@/lib/lead-status";
 
 export const createContactSchema = z.object({
   firstName: z.string().min(1, "First name required"),
@@ -40,7 +41,7 @@ export const createLeadSchema = z.object({
   tags: z.array(z.string()).optional(),
   ownerId: z.string().optional(),
   source: z.enum(["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"]).optional(),
-  status: z.enum(["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","LOST"]).default("NEW"),
+  status: z.enum(LEAD_STATUSES).default("NEW"),
   priority: z.enum(["LOW","MEDIUM","HIGH"]).default("MEDIUM"),
   track: z.coerce.number().int().min(1).max(3).optional(),
   estimatedValue: z.coerce.number().optional(),
@@ -59,7 +60,7 @@ export const updateLeadSchema = z.object({
   tags: z.array(z.string()).optional(),
   ownerId: z.string().optional().nullable(),
   source: z.enum(["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"]).optional().nullable(),
-  status: z.enum(["NEW","CONTACTED","QUALIFIED","PROPOSAL","NEGOTIATION","WON","LOST"]).optional(),
+  status: z.enum(LEAD_STATUSES).optional(),
   priority: z.enum(["LOW","MEDIUM","HIGH"]).optional(),
   track: z.coerce.number().int().min(1).max(3).optional().nullable(),
   estimatedValue: z.coerce.number().optional().nullable(),

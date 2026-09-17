@@ -6,14 +6,13 @@ import { useRouter } from "next/navigation";
 import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { createLead, updateLeadStatus, updateLead, archiveLead, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
 import { formatCurrency } from "@/lib/utils";
+import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
 
-const STATUSES = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "WON", "LOST"] as const;
-type Status = typeof STATUSES[number];
+const STATUSES = LEAD_STATUSES;
+type Status = LeadStatus;
+const STATUS_COLORS = LEAD_STATUS_COLORS;
+const STATUS_LABELS = LEAD_STATUS_LABELS;
 
-const STATUS_COLORS: Record<Status, string> = {
-  NEW: "#6b7280", CONTACTED: "#3b82f6", QUALIFIED: "#10b981",
-  PROPOSAL: "#8b5cf6", NEGOTIATION: "#f59e0b", WON: "#059669", LOST: "#dc2626",
-};
 
 const PRIORITY_COLORS: Record<string, string> = { LOW: "#6b7280", MEDIUM: "#f59e0b", HIGH: "#dc2626" };
 const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const;
@@ -137,9 +136,11 @@ function applySort(leads: any[], sort: Sort) {
 interface Props {
   leads: any[];
   users: any[];
+  /** ADMIN/FOUNDER. Employees only see their own leads (enforced server-side) and get no bulk or assignment controls. */
+  canManage: boolean;
 }
 
-export function LeadsClient({ leads: initial, users }: Props) {
+export function LeadsClient({ leads: initial, users, canManage }: Props) {
   const [leads, setLeads] = useState(initial);
   // useState only reads `initial` on mount — router.refresh() re-runs the server
   // component and gives us a new `initial` array, but without this effect that
@@ -323,12 +324,16 @@ export function LeadsClient({ leads: initial, users }: Props) {
             </button>
           </div>
 
-          <button onClick={() => setShowCSV(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs border" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "var(--card)" }}>
-            <Upload size={13} /> Import CSV
-          </button>
-          <button onClick={() => setShowDivide(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs border" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "var(--card)" }}>
-            <Divide size={13} /> Divide
-          </button>
+          {canManage && (
+            <>
+              <button onClick={() => setShowCSV(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs border" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "var(--card)" }}>
+                <Upload size={13} /> Import CSV
+              </button>
+              <button onClick={() => setShowDivide(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs border" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "var(--card)" }}>
+                <Divide size={13} /> Divide
+              </button>
+            </>
+          )}
           <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
             <Plus size={14} /> Add Lead
           </button>
@@ -352,14 +357,16 @@ export function LeadsClient({ leads: initial, users }: Props) {
           )}
         </div>
         <MultiSelect label="Status" value={filters.statuses} onChange={set("statuses")}
-          options={STATUSES.map((s) => ({ value: s, label: s, color: STATUS_COLORS[s], count: leads.filter((l) => l.status === s).length }))} />
+          options={STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s], color: STATUS_COLORS[s], count: leads.filter((l) => l.status === s).length }))} />
         <MultiSelect label="Priority" value={filters.priorities} onChange={set("priorities")}
           options={PRIORITIES.map((p) => ({ value: p, label: p, color: PRIORITY_COLORS[p], count: leads.filter((l) => l.priority === p).length }))} />
-        <MultiSelect label="Owner" value={filters.owners} onChange={set("owners")}
-          options={[
-            ...users.map((u: any) => ({ value: u.id, label: u.name, count: leads.filter((l) => l.ownerId === u.id).length })),
-            { value: NONE, label: "Unassigned", count: leads.filter((l) => !l.ownerId).length },
-          ]} />
+        {canManage && (
+          <MultiSelect label="Owner" value={filters.owners} onChange={set("owners")}
+            options={[
+              ...users.map((u: any) => ({ value: u.id, label: u.name, count: leads.filter((l) => l.ownerId === u.id).length })),
+              { value: NONE, label: "Unassigned", count: leads.filter((l) => !l.ownerId).length },
+            ]} />
+        )}
         <MultiSelect label="Track" value={filters.tracks} onChange={set("tracks")}
           options={[
             ...[1, 2, 3].map((t) => ({ value: String(t), label: `Track ${t}`, count: leads.filter((l) => l.track === t).length })),
@@ -405,7 +412,7 @@ export function LeadsClient({ leads: initial, users }: Props) {
               <div className="flex items-center justify-between px-3 py-2.5 border-b" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ background: STATUS_COLORS[status] }} />
-                  <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>{status}</span>
+                  <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>{STATUS_LABELS[status]}</span>
                   <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "var(--card)", color: "var(--muted-foreground)" }}>{byStatus[status].length}</span>
                 </div>
               </div>
@@ -495,7 +502,7 @@ export function LeadsClient({ leads: initial, users }: Props) {
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: `${STATUS_COLORS[l.status as Status]}15`, color: STATUS_COLORS[l.status as Status] }}>
-                        {l.status}
+                        {STATUS_LABELS[l.status as Status] ?? l.status}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs font-medium" style={{ color: PRIORITY_COLORS[l.priority] }}>{l.priority}</td>
@@ -551,11 +558,12 @@ export function LeadsClient({ leads: initial, users }: Props) {
       )}
 
       {showForm && (
-        <LeadForm users={users} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+        <LeadForm users={users} canManage={canManage} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
 
       {editingLead && (
         <LeadEditModal
+          canManage={canManage}
           key={editingLead.id}
           lead={editingLead}
           users={users}
@@ -570,7 +578,7 @@ export function LeadsClient({ leads: initial, users }: Props) {
         />
       )}
 
-      {showDivide && (
+      {canManage && showDivide && (
         <DivideModal
           users={users}
           eligibleCount={unassignedInView.length}
@@ -582,14 +590,14 @@ export function LeadsClient({ leads: initial, users }: Props) {
         />
       )}
 
-      {showCSV && (
+      {canManage && showCSV && (
         <CSVImportModal users={users} onSubmit={handleCSVImport} onClose={() => setShowCSV(false)} loading={isPending} />
       )}
     </div>
   );
 }
 
-function LeadForm({ users, onSubmit, onClose, loading }: any) {
+function LeadForm({ users, canManage, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
     name: "", phone: "", email: "", college: "", branch: "", usn: "", passoutYear: "", ownerId: "", source: "", status: "NEW",
     priority: "MEDIUM", track: "", estimatedValue: "", expectedCloseAt: "", nextFollowUpAt: "",
@@ -621,10 +629,10 @@ function LeadForm({ users, onSubmit, onClose, loading }: any) {
           <F label="Passout Year"><input type="number" value={form.passoutYear} onChange={(e) => set("passoutYear", e.target.value)} className="fi" placeholder="2027" /></F>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <F label="Owner"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
+          {canManage && (<F label="Owner"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>)}
           <F label="Source"><select value={form.source} onChange={(e) => set("source", e.target.value)} className="fi"><option value="">None</option>{["REFERRAL","WEBSITE","COLD_OUTREACH","EVENT","SOCIAL_MEDIA","OTHER"].map((s) => <option key={s} value={s}>{s.replace("_"," ")}</option>)}</select></F>
           <F label="Track"><select value={form.track} onChange={(e) => set("track", e.target.value)} className="fi"><option value="">None</option><option value="1">Track 1</option><option value="2">Track 2</option><option value="3">Track 3</option></select></F>
-          <F label="Status"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></F>
+          <F label="Status"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}</select></F>
           <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
           <F label="Est. Value (₹)"><input type="number" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)} className="fi" placeholder="0" /></F>
           <F label="Expected Close"><input type="date" value={form.expectedCloseAt} onChange={(e) => set("expectedCloseAt", e.target.value)} className="fi" /></F>
@@ -637,7 +645,7 @@ function LeadForm({ users, onSubmit, onClose, loading }: any) {
   );
 }
 
-function LeadEditModal({ lead, users, onSubmit, onClose, loading, onNavigate, hasPrev, hasNext, position, onQuickStatus }: any) {
+function LeadEditModal({ lead, users, canManage, onSubmit, onClose, loading, onNavigate, hasPrev, hasNext, position, onQuickStatus }: any) {
   const [form, setForm] = useState({
     name: lead.name || "",
     phone: lead.phone || "",
@@ -739,8 +747,8 @@ function LeadEditModal({ lead, users, onSubmit, onClose, loading, onNavigate, ha
           <F label="Passout Year"><input type="number" value={form.passoutYear} onChange={(e) => set("passoutYear", e.target.value)} className="fi" placeholder="2027" /></F>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <F label="Owner (Assigned To)"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>
-          <F label="Status (↑↓)"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></F>
+          {canManage && (<F label="Owner (Assigned To)"><select value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className="fi"><option value="">None</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></F>)}
+          <F label="Status (↑↓)"><select value={form.status} onChange={(e) => set("status", e.target.value)} className="fi">{STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}</select></F>
           <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
           <F label="Track"><select value={form.track} onChange={(e) => set("track", e.target.value)} className="fi"><option value="">None</option><option value="1">Track 1</option><option value="2">Track 2</option><option value="3">Track 3</option></select></F>
           <F label="Est. Value (₹)"><input type="number" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)} className="fi" placeholder="0" /></F>

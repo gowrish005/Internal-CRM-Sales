@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireManager } from "@/lib/dal";
 import { createContactSchema, createNoteSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 
@@ -18,8 +18,7 @@ export async function getContacts({
   page?: number;
   limit?: number;
 } = {}) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   const where: any = { isArchived: false };
   if (search) {
@@ -50,8 +49,7 @@ export async function getContacts({
 }
 
 export async function getContact(id: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   return prisma.contact.findUnique({
     where: { id },
@@ -85,8 +83,7 @@ export async function getContact(id: string) {
 }
 
 export async function createContact(data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   const parsed = createContactSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
@@ -105,7 +102,7 @@ export async function createContact(data: unknown) {
     data: {
       type: "CONTACT_CREATED",
       description: `Created contact ${contact.firstName} ${contact.lastName}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       contactId: contact.id,
     },
   });
@@ -115,8 +112,7 @@ export async function createContact(data: unknown) {
 }
 
 export async function updateContact(id: string, data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   const parsed = createContactSchema.partial().safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
@@ -136,7 +132,7 @@ export async function updateContact(id: string, data: unknown) {
     data: {
       type: "CONTACT_UPDATED",
       description: `Updated contact ${contact.firstName} ${contact.lastName}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       contactId: contact.id,
     },
   });
@@ -147,8 +143,7 @@ export async function updateContact(id: string, data: unknown) {
 }
 
 export async function addContactNote(data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   const parsed = createNoteSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
@@ -156,7 +151,7 @@ export async function addContactNote(data: unknown) {
   const note = await prisma.note.create({
     data: {
       ...parsed.data,
-      authorId: (session.user as any).id,
+      authorId: user.id,
     },
     include: { author: { select: { id: true, name: true } } },
   });
@@ -166,7 +161,7 @@ export async function addContactNote(data: unknown) {
       data: {
         type: "NOTE_ADDED",
         description: "Added a note",
-        userId: (session.user as any).id,
+        userId: user.id,
         contactId: parsed.data.contactId,
       },
     });
@@ -177,8 +172,7 @@ export async function addContactNote(data: unknown) {
 }
 
 export async function archiveContact(id: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireManager();
 
   await prisma.contact.update({ where: { id }, data: { isArchived: true } });
   revalidatePath("/crm/contacts");

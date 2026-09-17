@@ -13,7 +13,19 @@ enum Role {
   EMPLOYEE
 }
 
+// Student-calling pipeline for Leads. Mirrored in lib/lead-status.ts.
 enum LeadStatus {
+  NEW // not called yet
+  CONTACTED // reached, decision pending
+  HOT // interested
+  CALLBACK // asked to be called back
+  NO_REPLY // tried, not reached
+  WON
+  LOST
+}
+
+// B2B pipeline for Contacts — separate business, kept as it was.
+enum ContactStatus {
   NEW
   CONTACTED
   QUALIFIED
@@ -153,7 +165,7 @@ model Contact {
   location        String?
   image           String?
   ownerId         String?   @db.ObjectId
-  leadStatus      LeadStatus @default(NEW)
+  leadStatus      ContactStatus @default(NEW)
   leadSource      LeadSource?
   priority        Priority  @default(MEDIUM)
   tags            String[]

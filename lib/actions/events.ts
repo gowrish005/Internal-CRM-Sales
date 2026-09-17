@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireUser, isManager, eventScope, leadScope, assertEventOwnership } from "@/lib/dal";
 import { createEventSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 
@@ -14,16 +14,15 @@ export async function getEvents({
   to?: Date;
   userId?: string;
 } = {}) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
 
-  const where: any = { isCancelled: false };
+  const where: any = { isCancelled: false, ...eventScope(user) };
   if (from || to) {
     where.startAt = {};
     if (from) where.startAt.gte = from;
     if (to) where.startAt.lte = to;
   }
-  if (userId) {
+  if (userId && isManager(user)) {
     where.OR = [{ organizerId: userId }, { participantIds: { has: userId } }];
   }
 
@@ -40,13 +39,20 @@ export async function getEvents({
 }
 
 export async function createEvent(data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
 
   const parsed = createEventSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
 
   const { startAt, endAt, reminderAt, participantIds, ...rest } = parsed.data;
+  if (!isManager(user)) {
+    // Employees schedule on their own calendar, against their own leads only.
+    rest.organizerId = user.id;
+    if (rest.contactId) throw new Error("Contact not found");
+    if (rest.leadId && !(await prisma.lead.findFirst({ where: { id: rest.leadId, ...leadScope(user) }, select: { id: true } }))) {
+      throw new Error("Lead not found");
+    }
+  }
 
   const event = await prisma.calendarEvent.create({
     data: {
@@ -66,7 +72,7 @@ export async function createEvent(data: unknown) {
     data: {
       type: "MEETING_CREATED",
       description: `Scheduled: ${event.title}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       meetingId: event.id,
       contactId: event.contactId ?? undefined,
     },
@@ -77,13 +83,20 @@ export async function createEvent(data: unknown) {
 }
 
 export async function updateEvent(id: string, data: unknown) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
+  await assertEventOwnership(user, id);
 
   const parsed = createEventSchema.partial().safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
 
   const { startAt, endAt, reminderAt, participantIds, ...rest } = parsed.data;
+  if (!isManager(user)) {
+    delete rest.organizerId;
+    if (rest.contactId) throw new Error("Contact not found");
+    if (rest.leadId && !(await prisma.lead.findFirst({ where: { id: rest.leadId, ...leadScope(user) }, select: { id: true } }))) {
+      throw new Error("Lead not found");
+    }
+  }
 
   const event = await prisma.calendarEvent.update({
     where: { id },
@@ -100,7 +113,7 @@ export async function updateEvent(id: string, data: unknown) {
     data: {
       type: "MEETING_RESCHEDULED",
       description: `Updated: ${event.title}`,
-      userId: (session.user as any).id,
+      userId: user.id,
       meetingId: event.id,
     },
   });
@@ -110,8 +123,8 @@ export async function updateEvent(id: string, data: unknown) {
 }
 
 export async function cancelEvent(id: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const user = await requireUser();
+  await assertEventOwnership(user, id);
 
   await prisma.calendarEvent.update({ where: { id }, data: { isCancelled: true } });
   revalidatePath("/calendar");

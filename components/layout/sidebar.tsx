@@ -19,18 +19,20 @@ import {
 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 
+// `managerOnly` entries are hidden from employees. This is cosmetic — the
+// pages and actions behind them enforce access in lib/dal.ts.
 const nav = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   {
     label: "CRM",
     children: [
-      { href: "/crm/contacts", icon: Users, label: "B2B Contacts" },
+      { href: "/crm/contacts", icon: Users, label: "B2B Contacts", managerOnly: true },
       { href: "/crm/leads", icon: TrendingUp, label: "Leads" },
     ],
   },
   { href: "/calendar", icon: Calendar, label: "Calendar" },
   { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-  { href: "/activity", icon: Activity, label: "Activity" },
+  { href: "/activity", icon: Activity, label: "Activity", managerOnly: true },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -48,6 +50,8 @@ interface SidebarProps {
 export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const isManager = user.role === "ADMIN" || user.role === "FOUNDER";
+  const visible = (item: { managerOnly?: boolean }) => isManager || !item.managerOnly;
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
@@ -107,7 +111,7 @@ export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProp
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-        {nav.map((item) => {
+        {nav.filter(visible).map((item) => {
           if ("children" in item) {
             return (
               <div key={item.label} className="pt-4">
@@ -120,7 +124,7 @@ export function Sidebar({ user, mobileOpen = false, onMobileClose }: SidebarProp
                   </p>
                 )}
                 {collapsed && <div className="my-3" style={{ height: "1px", background: "rgba(34,197,94,0.07)" }} />}
-                {item.children!.map((child) => (
+                {item.children!.filter(visible).map((child) => (
                   <NavLink
                     key={child.href}
                     href={child.href}

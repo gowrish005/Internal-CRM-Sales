@@ -24,9 +24,11 @@ interface Props {
   contacts: any[];
   leads: any[];
   currentUserId?: string;
+  /** ADMIN/FOUNDER. Employees only have their own tasks (enforced server-side), so no assignee or contact pickers. */
+  canManage: boolean;
 }
 
-export function TasksClient({ tasks: initial, users, contacts, leads, currentUserId }: Props) {
+export function TasksClient({ tasks: initial, users, contacts, leads, currentUserId, canManage }: Props) {
   const [tasks, setTasks] = useState(initial);
   const [activeView, setActiveView] = useState("all");
   const [myTasksOnly, setMyTasksOnly] = useState(false);
@@ -111,7 +113,7 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
             </button>
           ))}
         </div>
-        <button
+        {canManage && <button
           onClick={() => setMyTasksOnly((v) => !v)}
           className="flex items-center gap-2 pr-1 pb-1 cursor-pointer select-none"
           style={{ background: "none", border: "none", padding: 0 }}
@@ -137,7 +139,7 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
             />
           </span>
           <span className="text-xs font-medium" style={{ color: myTasksOnly ? "#4ade80" : "var(--muted-foreground)" }}>My Tasks</span>
-        </button>
+        </button>}
       </div>
 
       {/* Task list */}
@@ -195,13 +197,13 @@ export function TasksClient({ tasks: initial, users, contacts, leads, currentUse
       </div>
 
       {showForm && (
-        <TaskForm users={users} contacts={contacts} leads={leads} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
+        <TaskForm users={users} contacts={contacts} leads={leads} canManage={canManage} onSubmit={handleCreate} onClose={() => setShowForm(false)} loading={isPending} />
       )}
     </div>
   );
 }
 
-function TaskForm({ users, contacts, leads, onSubmit, onClose, loading }: any) {
+function TaskForm({ users, contacts, leads, canManage, onSubmit, onClose, loading }: any) {
   const [form, setForm] = useState({
     title: "", description: "", priority: "MEDIUM",
     status: "TODO", dueAt: "", contactId: "", leadId: "",
@@ -234,8 +236,8 @@ function TaskForm({ users, contacts, leads, onSubmit, onClose, loading }: any) {
         <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, ownerIds, contactId: form.contactId || undefined, leadId: form.leadId || undefined, dueAt: form.dueAt || undefined }); }} className="p-5 space-y-3">
           <F label="Title" required><input value={form.title} onChange={(e) => set("title", e.target.value)} required className="fi" /></F>
 
-          {/* Assign to — multi-select */}
-          <F label={`Assign to${ownerIds.length > 0 ? ` (${ownerIds.length})` : ""}`}>
+          {/* Assign to — multi-select (managers only; an employee's task is always their own) */}
+          {canManage && <F label={`Assign to${ownerIds.length > 0 ? ` (${ownerIds.length})` : ""}`}>
             <div className="flex flex-wrap gap-1.5">
               {(() => {
                 const allOn = users.length > 0 && ownerIds.length === users.length;
@@ -273,12 +275,12 @@ function TaskForm({ users, contacts, leads, onSubmit, onClose, loading }: any) {
                 );
               })}
             </div>
-          </F>
+          </F>}
 
           <div className="grid grid-cols-2 gap-3">
             <F label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)} className="fi">{["LOW","MEDIUM","HIGH"].map((p) => <option key={p} value={p}>{p}</option>)}</select></F>
             <F label="Due Date"><input type="date" min={todayStr} value={form.dueAt} onChange={(e) => set("dueAt", e.target.value)} className="fi" /></F>
-            <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>
+            {canManage && <F label="Contact"><select value={form.contactId} onChange={(e) => set("contactId", e.target.value)} className="fi"><option value="">None</option>{contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></F>}
             <F label="Lead"><select value={form.leadId} onChange={(e) => set("leadId", e.target.value)} className="fi"><option value="">None</option>{leads.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></F>
           </div>
           <F label="Description"><textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} className="fi resize-none" /></F>

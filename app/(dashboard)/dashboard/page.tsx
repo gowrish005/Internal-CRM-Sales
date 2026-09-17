@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
-  const { stats, todayMeetings, upcomingMeetings, tasksDueToday, recentActivity } = data;
+  const { isManager, stats, todayMeetings, upcomingMeetings, tasksDueToday, recentActivity } = data;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -18,10 +18,18 @@ export default async function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total Contacts" value={stats.totalContacts} href="/crm/contacts" />
-        <StatCard label="Active Leads" value={stats.activeLeads} href="/crm/leads" />
+        {isManager ? (
+          <StatCard label="Total Contacts" value={stats.totalContacts} href="/crm/contacts" />
+        ) : (
+          <StatCard label="My Open Tasks" value={stats.openTasks} href="/tasks" />
+        )}
+        <StatCard label={isManager ? "Active Leads" : "My Active Leads"} value={stats.activeLeads} href="/crm/leads" />
         <StatCard label="Meetings Today" value={stats.meetingsToday} href="/calendar" />
-        <StatCard label="Pending Follow-ups" value={stats.pendingFollowUps} href="/crm/contacts?filter=followup" />
+        <StatCard
+          label={isManager ? "Pending Follow-ups" : "Lead Follow-ups Due"}
+          value={stats.pendingFollowUps}
+          href={isManager ? "/crm/contacts?filter=followup" : "/crm/leads"}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -61,7 +69,7 @@ export default async function DashboardPage() {
 
         {/* Recent activity */}
         <div>
-          <Section title="Recent Activity" href="/activity">
+          <Section title="Recent Activity" href={isManager ? "/activity" : undefined}>
             {recentActivity.length === 0 ? (
               <Empty text="No recent activity" />
             ) : (

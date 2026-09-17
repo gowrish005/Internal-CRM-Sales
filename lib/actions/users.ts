@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireUser, isManager } from "@/lib/dal";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -13,18 +13,28 @@ const createUserSchema = z.object({
   role: z.enum(["ADMIN", "FOUNDER", "EMPLOYEE"]).default("EMPLOYEE"),
 });
 
-export async function getUsers() {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+// Never send password hashes or push tokens to the browser.
+const PUBLIC_USER_FIELDS = { id: true, name: true, email: true, role: true, image: true, isActive: true, createdAt: true } as const;
 
+export async function getUsers() {
+  const user = await requireUser();
+
+  // Employees only ever act for themselves, so they only need their own entry.
   return prisma.user.findMany({
+    where: isManager(user) ? {} : { id: user.id },
+    select: PUBLIC_USER_FIELDS,
     orderBy: { name: "asc" },
   });
 }
 
+async function requireAdmin() {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") throw new Error("Unauthorized");
+  return user;
+}
+
 export async function createUser(data: unknown) {
-  const session = await auth();
-  if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized");
+  await requireAdmin();
 
   const parsed = createUserSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.message);
@@ -39,16 +49,14 @@ export async function createUser(data: unknown) {
 }
 
 export async function updateUserRole(id: string, role: string) {
-  const session = await auth();
-  if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized");
+  await requireAdmin();
 
   await prisma.user.update({ where: { id }, data: { role: role as any } });
   revalidatePath("/settings");
 }
 
 export async function toggleUserActive(id: string) {
-  const session = await auth();
-  if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized");
+  await requireAdmin();
 
   const user = await prisma.user.findUnique({ where: { id }, select: { isActive: true } });
   await prisma.user.update({ where: { id }, data: { isActive: !user?.isActive } });
@@ -56,9 +64,8 @@ export async function toggleUserActive(id: string) {
 }
 
 export async function deleteUser(id: string) {
-  const session = await auth();
-  if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized");
-  if ((session.user as any).id === id) throw new Error("You cannot delete your own account");
+  const admin = await requireAdmin();
+  if (admin.id === id) throw new Error("You cannot delete your own account");
 
   // Detach owned records so FK relations don't break, then remove the user
   // Detach optional relations, delete required-author records, then remove the user.
@@ -77,9 +84,7 @@ export async function deleteUser(id: string) {
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
-  const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
-  const userId = (session.user as any).id as string;
+  const userId = (await requireUser()).id;
 
   newPassword = newPassword?.trim();
   if (!newPassword || newPassword.length < 6) throw new Error("New password must be at least 6 characters");
