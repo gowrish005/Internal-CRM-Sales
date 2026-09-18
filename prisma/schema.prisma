@@ -97,6 +97,7 @@ model User {
   participantEventIds String[] @db.ObjectId
   notes         Note[]
   activities    Activity[]
+  callLogs      CallLog[]  @relation("UserCallLogs")
   accounts      Account[]
   sessions      Session[]
   notifications Notification[]
@@ -180,6 +181,7 @@ model Contact {
   tasks           Task[]
   notes           Note[]    @relation("ContactNotes")
   activities      Activity[]
+  callLogs        CallLog[] @relation("ContactCallLogs")
 }
 
 model Lead {
@@ -213,6 +215,7 @@ model Lead {
   tasks           Task[]
   notes           Note[]     @relation("LeadNotes")
   activities      Activity[]
+  callLogs        CallLog[]  @relation("LeadCallLogs")
 
   // Speeds up the leads panel's filters and the divide feature's "unassigned,
   // not archived" eligibility lookup.
@@ -287,6 +290,21 @@ model Note {
   contact     Contact? @relation("ContactNotes", fields: [contactId], references: [id])
   lead        Lead?    @relation("LeadNotes", fields: [leadId], references: [id])
   meeting     CalendarEvent? @relation("EventNotes", fields: [meetingId], references: [id])
+}
+
+model CallLog {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  contactId       String?  @db.ObjectId
+  leadId          String?  @db.ObjectId
+  loggedById      String   @db.ObjectId
+  calledAt        DateTime
+  durationMinutes Int?
+  remarks         String
+  createdAt       DateTime @default(now())
+
+  contact         Contact? @relation("ContactCallLogs", fields: [contactId], references: [id])
+  lead            Lead?    @relation("LeadCallLogs", fields: [leadId], references: [id])
+  loggedBy        User     @relation("UserCallLogs", fields: [loggedById], references: [id])
 }
 
 model Activity {

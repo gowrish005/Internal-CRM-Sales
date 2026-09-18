@@ -79,6 +79,10 @@ export async function getContact(id: string) {
         take: 10,
         include: { organizer: { select: { id: true, name: true } } },
       },
+      callLogs: {
+        include: { loggedBy: { select: { id: true, name: true } } },
+        orderBy: { calledAt: "desc" },
+      },
     },
   });
 }

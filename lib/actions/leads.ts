@@ -65,6 +65,10 @@ export async function getLead(id: string) {
         orderBy: { startAt: "desc" },
         take: 10,
       },
+      callLogs: {
+        include: { loggedBy: { select: { id: true, name: true } } },
+        orderBy: { calledAt: "desc" },
+      },
     },
   });
 }

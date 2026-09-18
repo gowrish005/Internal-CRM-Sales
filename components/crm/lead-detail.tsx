@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { formatIST, istDateString, parseISTDateOnly, endOfDayIST, isPastIST } from "@/lib/date";
-import { ArrowLeft, ChevronLeft, ChevronRight, Phone, Mail, CheckCircle, Circle, CalendarDays, MessageCircle } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Phone, Mail, CheckCircle, Circle, CalendarDays, MessageCircle, PhoneCall, Trash2 } from "lucide-react";
+import { addCallLog, deleteCallLog } from "@/lib/actions/call-logs";
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
 import { parseLeadOrder, readLeadOrderRaw, subscribeLeadOrder } from "@/lib/lead-order";
 import { useToast } from "@/components/crm/toast-provider";
@@ -83,6 +84,41 @@ export function LeadDetail({ lead, users, canManage }: Props) {
   const notify = useToast();
   const [form, setForm] = useState<Form>(() => leadToForm(lead));
   const set = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  // ---- call log
+  const [isPending, startTransition] = useTransition();
+  const [showCallForm, setShowCallForm] = useState(false);
+  const [callForm, setCallForm] = useState({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+
+  function handleAddCallLog() {
+    if (!callForm.remarks.trim()) return;
+    startTransition(async () => {
+      try {
+        await addCallLog({
+          leadId: lead.id,
+          calledAt: callForm.calledAt,
+          durationMinutes: callForm.durationMinutes ? parseInt(callForm.durationMinutes) : undefined,
+          remarks: callForm.remarks.trim(),
+        });
+        setCallForm({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+        setShowCallForm(false);
+        router.refresh();
+      } catch (err: any) {
+        notify("Couldn't save call log: " + err.message, "error");
+      }
+    });
+  }
+
+  function handleDeleteCallLog(logId: string) {
+    startTransition(async () => {
+      try {
+        await deleteCallLog(logId, undefined, lead.id);
+        router.refresh();
+      } catch (err: any) {
+        notify("Couldn't delete call log: " + err.message, "error");
+      }
+    });
+  }
 
   // ---- position in the leads list (same order as the list's filters + sort)
   const orderRaw = useSyncExternalStore(subscribeLeadOrder, readLeadOrderRaw, () => null);
@@ -340,6 +376,86 @@ export function LeadDetail({ lead, users, canManage }: Props) {
                 ))}
               </ul>
             )}
+          </Card>
+
+          <Card title={`Call Log (${lead.callLogs?.length ?? 0})`}>
+            <div className="space-y-2">
+              {showCallForm ? (
+                <div className="space-y-1.5 pb-1">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <Label>Date &amp; Time</Label>
+                      <input
+                        type="datetime-local"
+                        value={callForm.calledAt}
+                        onChange={(e) => setCallForm((f) => ({ ...f, calledAt: e.target.value }))}
+                        className="ld-in mt-0.5"
+                        style={{ colorScheme: "dark" }}
+                      />
+                    </div>
+                    <div>
+                      <Label>Duration (min)</Label>
+                      <input
+                        type="number"
+                        placeholder="Optional"
+                        value={callForm.durationMinutes}
+                        onChange={(e) => setCallForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                        className="ld-in mt-0.5"
+                      />
+                    </div>
+                  </div>
+                  <textarea
+                    placeholder="What was discussed..."
+                    value={callForm.remarks}
+                    onChange={(e) => setCallForm((f) => ({ ...f, remarks: e.target.value }))}
+                    rows={3}
+                    className="ld-in resize-none"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleAddCallLog}
+                      disabled={isPending || !callForm.remarks.trim()}
+                      className="px-2.5 py-1 rounded text-xs font-medium disabled:opacity-50"
+                      style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                    >Save</button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCallForm(false)}
+                      className="px-2.5 py-1 rounded text-xs"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCallForm(true)}
+                  className="flex items-center gap-1 text-xs"
+                  style={{ color: "var(--primary)" }}
+                >
+                  <PhoneCall size={11} /> Log a call
+                </button>
+              )}
+              {(lead.callLogs?.length ?? 0) === 0 && !showCallForm && <Empty>No calls logged yet</Empty>}
+              {lead.callLogs?.map((log: any) => (
+                <div key={log.id} className="rounded-md px-2.5 py-2 group relative" style={{ background: "var(--muted)" }}>
+                  <p className="text-xs whitespace-pre-line pr-5" style={{ color: "var(--foreground)" }}>{log.remarks}</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    <PhoneCall size={9} className="inline mr-1" />
+                    {formatIST(log.calledAt, "dayMonthTime")}
+                    {log.durationMinutes ? ` · ${log.durationMinutes} min` : ""}
+                    {" · "}{log.loggedBy?.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCallLog(log.id)}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-0.5 rounded"
+                    style={{ color: "var(--muted-foreground)" }}
+                  ><Trash2 size={11} /></button>
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card title={`Tasks & meetings (${lead.tasks.length + lead.meetings.length})`}>

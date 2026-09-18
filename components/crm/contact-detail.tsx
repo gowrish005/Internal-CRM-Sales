@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatIST } from "@/lib/date";
-import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Edit, Plus, Calendar, CheckSquare } from "lucide-react";
+import { ArrowLeft, Mail, Phone, ExternalLink, MapPin, Edit, Plus, Calendar, CheckSquare, PhoneCall, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { updateContact, addContactNote } from "@/lib/actions/contacts";
+import { addCallLog, deleteCallLog } from "@/lib/actions/call-logs";
 import { getInitials } from "@/lib/utils";
 import { ContactForm } from "@/components/forms/contact-form";
 
@@ -17,8 +18,10 @@ const STATUS_COLORS: Record<string, string> = {
 export function ContactDetail({ contact, users }: { contact: any; users: any[] }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
-  const [activeTab, setActiveTab] = useState<"activity" | "notes" | "tasks" | "leads">("activity");
+  const [activeTab, setActiveTab] = useState<"activity" | "notes" | "tasks" | "leads" | "calls">("activity");
   const [isPending, startTransition] = useTransition();
+  const [showCallForm, setShowCallForm] = useState(false);
+  const [callForm, setCallForm] = useState({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
   const router = useRouter();
 
   async function handleUpdate(data: any) {
@@ -46,7 +49,37 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
     });
   }
 
-  const tabs = ["activity", "notes", "tasks", "leads"] as const;
+  async function handleAddCallLog() {
+    if (!callForm.remarks.trim()) return;
+    startTransition(async () => {
+      try {
+        await addCallLog({
+          contactId: contact.id,
+          calledAt: callForm.calledAt,
+          durationMinutes: callForm.durationMinutes ? parseInt(callForm.durationMinutes) : undefined,
+          remarks: callForm.remarks.trim(),
+        });
+        setCallForm({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+        setShowCallForm(false);
+        router.refresh();
+      } catch (err: any) {
+        alert("Error: " + err.message);
+      }
+    });
+  }
+
+  async function handleDeleteCallLog(logId: string) {
+    startTransition(async () => {
+      try {
+        await deleteCallLog(logId, contact.id);
+        router.refresh();
+      } catch (err: any) {
+        alert("Error: " + err.message);
+      }
+    });
+  }
+
+  const tabs = ["activity", "notes", "tasks", "leads", "calls"] as const;
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -233,6 +266,99 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
                     </div>
                   ))
                 )
+              )}
+
+              {activeTab === "calls" && (
+                <div>
+                  <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                    {showCallForm ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs mb-1" style={{ color: "var(--muted-foreground)" }}>Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              value={callForm.calledAt}
+                              onChange={(e) => setCallForm((f) => ({ ...f, calledAt: e.target.value }))}
+                              className="w-full text-sm rounded border px-2 py-1.5 outline-none"
+                              style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)", colorScheme: "dark" }}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs mb-1" style={{ color: "var(--muted-foreground)" }}>Duration (min)</label>
+                            <input
+                              type="number"
+                              placeholder="Optional"
+                              value={callForm.durationMinutes}
+                              onChange={(e) => setCallForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                              className="w-full text-sm rounded border px-2 py-1.5 outline-none"
+                              style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+                            />
+                          </div>
+                        </div>
+                        <textarea
+                          placeholder="What was discussed on the call..."
+                          value={callForm.remarks}
+                          onChange={(e) => setCallForm((f) => ({ ...f, remarks: e.target.value }))}
+                          rows={3}
+                          className="w-full text-sm rounded border px-2 py-1.5 outline-none resize-none"
+                          style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleAddCallLog}
+                            disabled={isPending || !callForm.remarks.trim()}
+                            className="px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50"
+                            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setShowCallForm(false)}
+                            className="px-3 py-1.5 rounded text-xs"
+                            style={{ color: "var(--muted-foreground)" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowCallForm(true)}
+                        className="flex items-center gap-1.5 text-sm"
+                        style={{ color: "var(--primary)" }}
+                      >
+                        <PhoneCall size={13} /> Log a call
+                      </button>
+                    )}
+                  </div>
+                  {contact.callLogs?.length === 0 ? (
+                    <EmptyState text="No calls logged yet" />
+                  ) : (
+                    contact.callLogs?.map((log: any) => (
+                      <div key={log.id} className="px-4 py-3 border-b group" style={{ borderColor: "var(--border)" }}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--foreground)" }}>{log.remarks}</p>
+                            <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                              <PhoneCall size={10} className="inline mr-1" />
+                              {formatIST(log.calledAt, "monthDayTime")}
+                              {log.durationMinutes ? ` · ${log.durationMinutes} min` : ""}
+                              {" · "}{log.loggedBy?.name}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteCallLog(log.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded"
+                            style={{ color: "var(--muted-foreground)" }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </div>
           </div>
