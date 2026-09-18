@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { formatIST, istDateString, parseISTDateOnly, endOfDayIST, isPastIST } from "@/lib/date";
-import { ArrowLeft, ChevronLeft, ChevronRight, Phone, Mail, CheckCircle, Circle, CalendarDays } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Phone, Mail, CheckCircle, Circle, CalendarDays, MessageCircle } from "lucide-react";
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/lead-status";
 import { parseLeadOrder, readLeadOrderRaw, subscribeLeadOrder } from "@/lib/lead-order";
 import { useToast } from "@/components/crm/toast-provider";
+import { sendWhatsApp } from "@/components/crm/whatsapp-modal";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
 const PRIORITY_COLORS: Record<string, string> = { LOW: "#6b7280", MEDIUM: "#f59e0b", HIGH: "#dc2626" };
@@ -225,6 +226,11 @@ export function LeadDetail({ lead, users, canManage }: Props) {
               <div className="flex gap-1">
                 <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} className="ld-in" />
                 {form.phone && <a href={`tel:${form.phone}`} title="Call" className="ld-icon"><Phone size={13} /></a>}
+                {form.phone && (
+                  <button onClick={() => sendWhatsApp({ ...lead, ...form })} title="Send WhatsApp" className="ld-icon" style={{ color: "#25d366" }}>
+                    <MessageCircle size={13} />
+                  </button>
+                )}
               </div>
             </Field>
             <Field label="Email">
@@ -379,6 +385,7 @@ export function LeadDetail({ lead, users, canManage }: Props) {
         .ld-icon{display:flex;align-items:center;justify-content:center;width:30px;flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius);color:var(--muted-foreground)}
         .ld-icon:hover{color:var(--foreground);background:var(--secondary)}
       `}</style>
+
     </form>
   );
 }

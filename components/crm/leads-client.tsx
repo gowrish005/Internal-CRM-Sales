@@ -3,7 +3,8 @@
 import { useState, useTransition, useRef, useMemo, useEffect, useCallback, useSyncExternalStore, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check } from "lucide-react";
+import { Plus, LayoutGrid, List, Upload, Divide, X, Edit2, Search, ChevronDown, ChevronUp, ChevronsUpDown, Check, MessageCircle } from "lucide-react";
+import { WhatsAppTemplateManager, sendWhatsApp } from "@/components/crm/whatsapp-modal";
 import { createLead, updateLeadStatus, divideLeads, importLeadsFromCSV } from "@/lib/actions/leads";
 import { saveLeadOrder } from "@/lib/lead-order";
 import { useToast } from "@/components/crm/toast-provider";
@@ -155,6 +156,7 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [showDivide, setShowDivide] = useState(false);
   const [showCSV, setShowCSV] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Status | null>(null);
@@ -298,6 +300,13 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
               <LayoutGrid size={14} />
             </button>
           </div>
+          <button
+            onClick={() => setShowTemplateManager(true)}
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs border"
+            style={{ borderColor: "#25d366", color: "#25d366", background: "rgba(37,211,102,0.08)" }}
+          >
+            <MessageCircle size={13} /> Msg Template
+          </button>
 
           {canManage && (
             <>
@@ -404,14 +413,26 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                   >
                     <div className="flex items-start justify-between gap-1">
                       <p className="text-sm font-medium mb-1 flex-1" style={{ color: "var(--foreground)" }}>{lead.name}</p>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openLead(lead); }}
-                        className="shrink-0 p-0.5 rounded hover:bg-[var(--secondary)]"
-                        style={{ color: "var(--muted-foreground)" }}
-                        title="Edit"
-                      >
-                        <Edit2 size={11} />
-                      </button>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {lead.phone && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); sendWhatsApp(lead); }}
+                            className="p-0.5 rounded hover:bg-[var(--secondary)]"
+                            style={{ color: "#25d366" }}
+                            title="Send WhatsApp"
+                          >
+                            <MessageCircle size={11} />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openLead(lead); }}
+                          className="p-0.5 rounded hover:bg-[var(--secondary)]"
+                          style={{ color: "var(--muted-foreground)" }}
+                          title="Edit"
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                      </div>
                     </div>
                     {(lead.phone || lead.college) && (
                       <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>{[lead.phone, lead.college].filter(Boolean).join(" · ")}</p>
@@ -451,14 +472,14 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                       </th>
                     );
                   })}
-                  <th />
+                  <th className="sticky right-0" style={{ background: "var(--muted)", width: 64, minWidth: 64 }} />
                 </tr>
               </thead>
               <tbody style={{ background: "var(--card)" }}>
                 {displayed.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>{leads.length ? "No leads match these filters" : "No leads yet"}</td></tr>
                 ) : paged.map((l) => (
-                  <tr key={l.id} onClick={() => openLead(l)} className="border-b cursor-pointer hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
+                  <tr key={l.id} onClick={() => openLead(l)} className="group border-b cursor-pointer hover:bg-[var(--muted)]" style={{ borderColor: "var(--border)" }}>
                     <td className="px-4 py-2.5">
                       <div className="font-medium" style={{ color: "var(--foreground)" }}>{l.name}</div>
                       {l.usn && <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>{l.usn}</div>}
@@ -483,10 +504,17 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
                     <td className="px-4 py-2.5 text-xs font-medium" style={{ color: PRIORITY_COLORS[l.priority] }}>{l.priority}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--foreground)" }}>{l.estimatedValue ? formatCurrency(l.estimatedValue) : "—"}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: "var(--muted-foreground)" }}>{l.nextFollowUpAt ? formatIST(l.nextFollowUpAt, "monthDayYear") : "—"}</td>
-                    <td className="px-4 py-2.5">
-                      <button onClick={(e) => { e.stopPropagation(); openLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
-                        <Edit2 size={13} />
-                      </button>
+                    <td className="sticky right-0 px-2 py-2.5 group-hover:bg-[var(--muted)]" style={{ background: "var(--card)", width: 64, minWidth: 64, boxShadow: "-4px 0 8px rgba(0,0,0,0.15)" }}>
+                      <div className="flex items-center gap-1">
+                        {l.phone && (
+                          <button onClick={(e) => { e.stopPropagation(); sendWhatsApp(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "#25d366" }} title="Send WhatsApp">
+                            <MessageCircle size={13} />
+                          </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); openLead(l); }} className="p-1 rounded hover:bg-[var(--secondary)]" style={{ color: "var(--muted-foreground)" }} title="Edit">
+                          <Edit2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -550,6 +578,10 @@ export function LeadsClient({ leads: initial, users, canManage }: Props) {
 
       {canManage && showCSV && (
         <CSVImportModal users={users} onSubmit={handleCSVImport} onClose={() => setShowCSV(false)} loading={isPending} />
+      )}
+
+      {showTemplateManager && (
+        <WhatsAppTemplateManager onClose={() => setShowTemplateManager(false)} />
       )}
 
     </div>
