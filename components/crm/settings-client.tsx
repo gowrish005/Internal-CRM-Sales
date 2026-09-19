@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createUser, updateUserRole, toggleUserActive, deleteUser, changePassword } from "@/lib/actions/users";
 import { getInitials } from "@/lib/utils";
 import { X } from "lucide-react";
+import { PasswordInput } from "@/components/ui/password-input";
 
 const TABS = ["Profile", "Users"] as const;
 
@@ -238,15 +239,15 @@ function ChangePasswordCard() {
       <form onSubmit={submit} className="space-y-3 max-w-sm">
         <div>
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Current password</label>
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required style={inputStyle} />
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} required style={inputStyle} />
         </div>
         <div>
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>New password</label>
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={6} style={inputStyle} />
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} required minLength={6} style={inputStyle} />
         </div>
         <div>
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Confirm new password</label>
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={6} style={inputStyle} />
+          <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={6} style={inputStyle} />
         </div>
         {msg && (
           <p className="text-xs" style={{ color: msg.type === "ok" ? "#4ade80" : "#f87171" }}>{msg.text}</p>
@@ -293,7 +294,7 @@ function AddUserForm({ onSubmit, onClose, loading }: any) {
         <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="p-5 space-y-3">
           <F label="Name" required><input value={form.name} onChange={(e) => set("name", e.target.value)} required className="fi" /></F>
           <F label="Email" required><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} required className="fi" /></F>
-          <F label="Password" required><input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} required minLength={6} className="fi" /></F>
+          <F label="Password" required><PasswordInput value={form.password} onChange={(e) => set("password", e.target.value)} required minLength={6} className="fi" /></F>
           <F label="Role">
             <select value={form.role} onChange={(e) => set("role", e.target.value)} className="fi">
               {["ADMIN","FOUNDER","EMPLOYEE"].map((r) => <option key={r} value={r}>{r}</option>)}

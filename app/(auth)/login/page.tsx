@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Zap } from "lucide-react";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -82,12 +83,12 @@ export default function LoginPage() {
               <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>
                 Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
+                wrapperClassName="w-full"
                 className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{
                   borderColor: "#1e3322",
