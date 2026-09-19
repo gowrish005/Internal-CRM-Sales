@@ -15,13 +15,18 @@ const STATUS_COLORS: Record<string, string> = {
   PROPOSAL: "#8b5cf6", NEGOTIATION: "#f59e0b", WON: "#059669", LOST: "#dc2626",
 };
 
+function localNow() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 export function ContactDetail({ contact, users }: { contact: any; users: any[] }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const [activeTab, setActiveTab] = useState<"activity" | "notes" | "tasks" | "leads" | "calls">("activity");
   const [isPending, startTransition] = useTransition();
   const [showCallForm, setShowCallForm] = useState(false);
-  const [callForm, setCallForm] = useState({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+  const [callForm, setCallForm] = useState({ calledAt: localNow(), durationMinutes: "", remarks: "" });
   const router = useRouter();
 
   async function handleUpdate(data: any) {
@@ -55,11 +60,11 @@ export function ContactDetail({ contact, users }: { contact: any; users: any[] }
       try {
         await addCallLog({
           contactId: contact.id,
-          calledAt: callForm.calledAt,
+          calledAt: new Date(callForm.calledAt).toISOString(),
           durationMinutes: callForm.durationMinutes ? parseInt(callForm.durationMinutes) : undefined,
           remarks: callForm.remarks.trim(),
         });
-        setCallForm({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+        setCallForm({ calledAt: localNow(), durationMinutes: "", remarks: "" });
         setShowCallForm(false);
         router.refresh();
       } catch (err: any) {

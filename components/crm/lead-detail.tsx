@@ -73,6 +73,11 @@ async function patchLead(id: string, body: object): Promise<{ name: string; stat
   return json;
 }
 
+function localNow() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 interface Props {
   lead: any;
   users: any[];
@@ -88,7 +93,7 @@ export function LeadDetail({ lead, users, canManage }: Props) {
   // ---- call log
   const [isPending, startTransition] = useTransition();
   const [showCallForm, setShowCallForm] = useState(false);
-  const [callForm, setCallForm] = useState({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+  const [callForm, setCallForm] = useState({ calledAt: localNow(), durationMinutes: "", remarks: "" });
 
   function handleAddCallLog() {
     if (!callForm.remarks.trim()) return;
@@ -96,11 +101,11 @@ export function LeadDetail({ lead, users, canManage }: Props) {
       try {
         await addCallLog({
           leadId: lead.id,
-          calledAt: callForm.calledAt,
+          calledAt: new Date(callForm.calledAt).toISOString(),
           durationMinutes: callForm.durationMinutes ? parseInt(callForm.durationMinutes) : undefined,
           remarks: callForm.remarks.trim(),
         });
-        setCallForm({ calledAt: new Date().toISOString().slice(0, 16), durationMinutes: "", remarks: "" });
+        setCallForm({ calledAt: localNow(), durationMinutes: "", remarks: "" });
         setShowCallForm(false);
         router.refresh();
       } catch (err: any) {
