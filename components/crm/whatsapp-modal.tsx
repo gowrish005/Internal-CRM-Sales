@@ -68,7 +68,10 @@ export function sendWhatsApp(lead: any): void {
       navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]).catch(() => {});
     }).catch(() => {});
   }
-  window.open(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`, "_blank");
+  const encoded = encodeURIComponent(text);
+  const url = `whatsapp://send?phone=${phone}&text=${encoded}`;
+  // window.open(_blank) gets blocked on mobile; location.href handles both
+  window.location.href = url;
 }
 
 // ---- Template Manager modal ----
