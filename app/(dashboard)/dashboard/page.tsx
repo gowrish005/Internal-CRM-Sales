@@ -1,14 +1,22 @@
 import { getDashboardData } from "@/lib/actions/dashboard";
+import { getPipelineFunnel, getTeamPerformance, getLeadBatchPerformance } from "@/lib/actions/analytics";
 import { formatIST, isTomorrowIST, startOfDayIST } from "@/lib/date";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, isLeadStatus } from "@/lib/lead-status";
+import { PipelineFunnelBar } from "@/components/dashboard/pipeline-funnel";
+import { TeamPerformance } from "@/components/dashboard/team-performance";
+import { LeadBatchPerformanceCard } from "@/components/dashboard/lead-batch-performance";
 
 type FollowUpLead = Awaited<ReturnType<typeof getDashboardData>>["leadsNeedingFollowUp"][number];
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
   const { isManager, stats, todayMeetings, upcomingMeetings, tasksDueToday, recentActivity, leadsNeedingFollowUp } = data;
+
+  const [pipelineFunnel, teamPerformance, leadBatchPerformance] = isManager
+    ? await Promise.all([getPipelineFunnel(), getTeamPerformance(), getLeadBatchPerformance()])
+    : [null, null, null];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -98,6 +106,14 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
+
+      {isManager && pipelineFunnel && teamPerformance && leadBatchPerformance && (
+        <div className="space-y-4">
+          <PipelineFunnelBar funnel={pipelineFunnel} />
+          <TeamPerformance rows={teamPerformance} />
+          <LeadBatchPerformanceCard data={leadBatchPerformance} />
+        </div>
+      )}
     </div>
   );
 }
